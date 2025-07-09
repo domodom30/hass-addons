@@ -16,10 +16,23 @@ const SCAN_MAX = 3;
  * Sleep for
  * @param ms miliseconds
  */
-async function sleep(ms) {
-  return new Promise((resolve) => {
-    setTimeout(resolve, ms);
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+/**
+ * Wrap a BLE command promise with a timeout
+ */
+async function withTimeout(promise, ms, label) {
+  let timer;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms);
   });
+  try {
+    return await Promise.race([promise, timeout]);
+  } finally {
+    clearTimeout(timer);
+  }
 }
 /**
  * Events:
@@ -53,6 +66,18 @@ class Manager extends EventEmitter {
     this.gateway_key = "";
     this.gateway_user = "";
     this.gateway_pass = "";
+  }
+
+  async _disconnectLock(lock) {
+    try {
+      if (typeof lock.disconnect === 'function') {
+        await lock.disconnect();
+      } else if (this.client && typeof this.client.disconnectLock === 'function') {
+        await this.client.disconnectLock(lock.getAddress());
+      }
+    } catch (err) {
+      console.warn('Warning: disconnectLock failed', err);
+    }
   }
 
   async init() {
@@ -162,60 +187,56 @@ class Manager extends EventEmitter {
     if (!lock) return false;
 
     // Ensure BLE connection
-    if (!(await this._connectLock(lock))) {
-      return false;
-    }
+    if (!(await this._connectLock(lock))) return false;
 
-    // Sequentially initialize with timeouts and auto-reconnect on failures
     try {
-      // 1) Read auto-lock time
+      // 1) Auto-lock time
       try {
         lock.autoLockTime = await withTimeout(lock.getAutolockTime(), 5000, 'getAutolockTime');
       } catch (err) {
-        console.warn('Warning: getAutolockTime failed or timed out, reconnecting then continuing', err);
+        console.warn('getAutolockTime failed or timed out, reconnecting...', err);
         await this._disconnectLock(lock);
         await sleep(100);
         await this._connectLock(lock);
       }
 
-      // 2) Read lock status
+      // 2) Lock status
       try {
         lock.locked = await withTimeout(lock.getLockStatus(), 5000, 'getLockStatus');
       } catch (err) {
-        console.warn('Warning: getLockStatus failed or timed out, reconnecting then continuing', err);
+        console.warn('getLockStatus failed or timed out, reconnecting...', err);
         await this._disconnectLock(lock);
         await sleep(100);
         await this._connectLock(lock);
       }
 
-      // 3) Read audio mode (may not be supported)
+      // 3) Audio mode
       try {
         const mode = await withTimeout(lock.getLockSound(), 5000, 'getLockSound');
         lock.audio = (mode === AudioManage.TURN_ON);
       } catch (err) {
-        console.warn('Warning: getLockSound failed or timed out (audio unsupported?), reconnecting then continuing', err);
+        console.warn('getLockSound failed or timed out, reconnecting...', err);
         await this._disconnectLock(lock);
         await sleep(100);
         await this._connectLock(lock);
       }
 
-      // 4) Calibrate time (catch but don't block)
+      // 4) Calibrate time
       try {
         await withTimeout(lock.calibrateTimeCommand(), 5000, 'calibrateTimeCommand');
       } catch (err) {
-        console.warn('Warning: calibrateTimeCommand failed or timed out, reconnecting then continuing', err);
+        console.warn('calibrateTimeCommand failed or timed out, reconnecting...', err);
         await this._disconnectLock(lock);
         await sleep(100);
         await this._connectLock(lock);
       }
 
-      // Finalize pairing
+      // Finalize
       this.pairedLocks.set(lock.getAddress(), lock);
       this.newLocks.delete(lock.getAddress());
       this._bindLockEvents(lock);
       this.emit("lockPaired", lock);
       return true;
-
     } catch (error) {
       console.error('initLock sequence failed', error);
       return false;
