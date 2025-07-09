@@ -159,42 +159,54 @@ class Manager extends EventEmitter {
    */
   async initLock(address) {
     const lock = this.newLocks.get(address);
-    if (typeof lock === "undefined") return false;
+    if (!lock) return false;
 
     // Ensure BLE connection
     if (!(await this._connectLock(lock))) {
       return false;
     }
 
-    // Sequentially initialize without aborting on individual failures
+    // Sequentially initialize with timeouts and auto-reconnect on failures
     try {
       // 1) Read auto-lock time
       try {
-        lock.autoLockTime = await lock.getAutolockTime();
+        lock.autoLockTime = await withTimeout(lock.getAutolockTime(), 5000, 'getAutolockTime');
       } catch (err) {
-        console.warn('Warning: getAutolockTime failed, continuing', err);
+        console.warn('Warning: getAutolockTime failed or timed out, reconnecting then continuing', err);
+        await this._disconnectLock(lock);
+        await sleep(100);
+        await this._connectLock(lock);
       }
 
       // 2) Read lock status
       try {
-        lock.locked = await lock.getLockStatus();
+        lock.locked = await withTimeout(lock.getLockStatus(), 5000, 'getLockStatus');
       } catch (err) {
-        console.warn('Warning: getLockStatus failed, continuing', err);
+        console.warn('Warning: getLockStatus failed or timed out, reconnecting then continuing', err);
+        await this._disconnectLock(lock);
+        await sleep(100);
+        await this._connectLock(lock);
       }
 
       // 3) Read audio mode (may not be supported)
       try {
-        const mode = await lock.getLockSound();
+        const mode = await withTimeout(lock.getLockSound(), 5000, 'getLockSound');
         lock.audio = (mode === AudioManage.TURN_ON);
       } catch (err) {
-        console.warn('Warning: getLockSound failed (audio unsupported?), continuing', err);
+        console.warn('Warning: getLockSound failed or timed out (audio unsupported?), reconnecting then continuing', err);
+        await this._disconnectLock(lock);
+        await sleep(100);
+        await this._connectLock(lock);
       }
 
       // 4) Calibrate time (catch but don't block)
       try {
-        await lock.calibrateTimeCommand();
+        await withTimeout(lock.calibrateTimeCommand(), 5000, 'calibrateTimeCommand');
       } catch (err) {
-        console.warn('Warning: calibrateTimeCommand failed, continuing', err);
+        console.warn('Warning: calibrateTimeCommand failed or timed out, reconnecting then continuing', err);
+        await this._disconnectLock(lock);
+        await sleep(100);
+        await this._connectLock(lock);
       }
 
       // Finalize pairing
@@ -209,6 +221,7 @@ class Manager extends EventEmitter {
       return false;
     }
   }
+
 
   async unlockLock(address) {
     const lock = this.pairedLocks.get(address);
