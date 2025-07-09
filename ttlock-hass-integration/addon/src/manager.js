@@ -159,26 +159,55 @@ class Manager extends EventEmitter {
    */
   async initLock(address) {
     const lock = this.newLocks.get(address);
-    if (typeof lock != "undefined") {
-      if (!(await this._connectLock(lock))) {
-        return false;
-      }
-      try {
-        let res = await lock.initLock();
-        if (res != false) {
-          this.pairedLocks.set(lock.getAddress(), lock);
-          this.newLocks.delete(lock.getAddress());
-          this._bindLockEvents(lock);
-          this.emit("lockPaired", lock);
-          return true;
-        }
-        return false;
-      } catch (error) {
-        console.error(error);
-        return false;
-      }
+    if (typeof lock === "undefined") return false;
+
+    // Ensure BLE connection
+    if (!(await this._connectLock(lock))) {
+      return false;
     }
-    return false;
+
+    // Sequentially initialize without aborting on individual failures
+    try {
+      // 1) Read auto-lock time
+      try {
+        lock.autoLockTime = await lock.getAutolockTime();
+      } catch (err) {
+        console.warn('Warning: getAutolockTime failed, continuing', err);
+      }
+
+      // 2) Read lock status
+      try {
+        lock.locked = await lock.getLockStatus();
+      } catch (err) {
+        console.warn('Warning: getLockStatus failed, continuing', err);
+      }
+
+      // 3) Read audio mode (may not be supported)
+      try {
+        const mode = await lock.getLockSound();
+        lock.audio = (mode === AudioManage.TURN_ON);
+      } catch (err) {
+        console.warn('Warning: getLockSound failed (audio unsupported?), continuing', err);
+      }
+
+      // 4) Calibrate time (catch but don't block)
+      try {
+        await lock.calibrateTimeCommand();
+      } catch (err) {
+        console.warn('Warning: calibrateTimeCommand failed, continuing', err);
+      }
+
+      // Finalize pairing
+      this.pairedLocks.set(lock.getAddress(), lock);
+      this.newLocks.delete(lock.getAddress());
+      this._bindLockEvents(lock);
+      this.emit("lockPaired", lock);
+      return true;
+
+    } catch (error) {
+      console.error('initLock sequence failed', error);
+      return false;
+    }
   }
 
   async unlockLock(address) {
