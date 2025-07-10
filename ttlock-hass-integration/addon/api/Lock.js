@@ -45,13 +45,6 @@ class Lock {
     lock.connected = lockObject.isConnected();
     lock.rssi = lockObject.getRssi();
     lock.battery = lockObject.getBattery();
-    try {
-      lock.autoLockTime = await lockObject.getAutolockTime();
-      lock.locked = await lockObject.getLockStatus();
-      lock.audio  = (await lockObject.getLockSound()) == AudioManage.TURN_ON ? true : false;
-    } catch (error) {
-      // new locks don't have this data
-    }
     lock.hasAutoLock = lockObject.hasAutolock();
     lock.hasPasscode = lockObject.hasPassCode();
     lock.hasCard = lockObject.hasICCard();
