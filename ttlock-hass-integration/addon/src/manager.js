@@ -4,23 +4,6 @@ const EventEmitter = require('events');
 const store = require("./store");
 const { TTLockClient, AudioManage, LockedStatus, LogOperateCategory, LogOperateNames } = require("ttlock-sdk-js");
 
-// ======= Add this utility =======
-/**
- * Runs a promise with a timeout, and throws if timeout exceeded.
- */
-async function runWithTimeout(promise, ms, description = "operation") {
-  let timeout;
-  const timeoutPromise = new Promise((_, reject) => {
-    timeout = setTimeout(() => reject(new Error(`${description} timed out after ${ms}ms`)), ms);
-  });
-  try {
-    return await Promise.race([promise, timeoutPromise]);
-  } finally {
-    clearTimeout(timeout);
-  }
-}
-// ================================
-
 const ScanType = Object.freeze({
   NONE: 0,
   AUTOMATIC: 1,
@@ -29,23 +12,41 @@ const ScanType = Object.freeze({
 
 const SCAN_MAX = 3;
 
+/**
+ * Sleep for
+ * @param ms miliseconds
+ */
 async function sleep(ms) {
   return new Promise((resolve) => {
     setTimeout(resolve, ms);
   });
 }
-
+/**
+ * Events:
+ * - lockListChanged - when a lock was found during scanning
+ * - lockPaired - a lock was paired
+ * - lockConnected - a connetion to a lock was estabilisehed
+ * - lockLock - a lock was locked
+ * - lockUnlock - a lock was unlocked
+ * - scanStart - scanning has started
+ * - scanStop - scanning has stopped
+ */
 class Manager extends EventEmitter {
   constructor() {
     super();
     this.startupStatus = -1;
     this.client = undefined;
     this.scanning = false;
+    /** @type {NodeJS.Timeout} */
     this.scanTimer = undefined;
     this.scanCounter = 0;
+    /** @type {Map<string, import('ttlock-sdk-js').TTLock>} Locks that are paired and were seen during the BLE scan */
     this.pairedLocks = new Map();
+    /** @type {Map<string, import('ttlock-sdk-js').TTLock>} Locks that are pairable and were seen during the BLE scan */
     this.newLocks = new Map();
+    /** @type {Set<string>} Locks found during scan that we need to connect to at least once to get their information */
     this.connectQueue = new Set();
+    /** @type {'none'|'noble'} */
     this.gateway = 'none';
     this.gateway_host = "";
     this.gateway_port = 0;
@@ -58,6 +59,7 @@ class Manager extends EventEmitter {
     if (typeof this.client == "undefined") {
       try {
         let clientOptions = {}
+
         if (this.gateway == "noble") {
           clientOptions.scannerType = "noble-websocket";
           clientOptions.scannerOptions = {
@@ -68,10 +70,15 @@ class Manager extends EventEmitter {
             websocketPassword: this.gateway_pass
           }
         }
+
         this.client = new TTLockClient(clientOptions);
         this.updateClientLockDataFromStore();
 
         this.client.on("ready", () => {
+          // should not trigger if prepareBTService emits it
+          // but useful for when websocket reconnects
+          // disable it for now as the reconnection won't re-trigger ready
+          // this.startScan(ScanType.AUTOMATIC);
           this.client.startMonitor();
         });
         this.client.on("foundLock", this._onFoundLock.bind(this));
@@ -146,6 +153,10 @@ class Manager extends EventEmitter {
     return this.newLocks;
   }
 
+  /**
+   * Init a new lock
+   * @param {string} address MAC address
+   */
   async initLock(address) {
     const lock = this.newLocks.get(address);
     if (typeof lock != "undefined") {
@@ -153,7 +164,7 @@ class Manager extends EventEmitter {
         return false;
       }
       try {
-        let res = await runWithTimeout(lock.initLock(), 10000, "initLock");
+        let res = await lock.initLock();
         if (res != false) {
           this.pairedLocks.set(lock.getAddress(), lock);
           this.newLocks.delete(lock.getAddress());
@@ -163,8 +174,7 @@ class Manager extends EventEmitter {
         }
         return false;
       } catch (error) {
-        console.warn("initLock error:", error);
-        try { await lock.disconnect(); } catch (e) {}
+        console.error(error);
         return false;
       }
     }
@@ -178,12 +188,10 @@ class Manager extends EventEmitter {
         return false;
       }
       try {
-        const res = await runWithTimeout(lock.unlock(), 8000, "unlock");
+        const res = await lock.unlock();
         return res;
       } catch (error) {
-        console.warn("unlockLock error:", error);
-        try { await lock.disconnect(); } catch (e) {}
-        return false;
+        console.error(error);
       }
     }
     return false;
@@ -196,12 +204,10 @@ class Manager extends EventEmitter {
         return false;
       }
       try {
-        const res = await runWithTimeout(lock.lock(), 8000, "lock");
+        const res = await lock.lock();
         return res;
       } catch (error) {
-        console.warn("lockLock error:", error);
-        try { await lock.disconnect(); } catch (e) {}
-        return false;
+        console.error(error);
       }
     }
     return false;
@@ -214,13 +220,11 @@ class Manager extends EventEmitter {
         return false;
       }
       try {
-        const res = await runWithTimeout(lock.setAutoLockTime(value), 8000, "setAutoLockTime");
+        const res = await lock.setAutoLockTime(value);
         this.emit("lockUpdated", lock);
         return res;
       } catch (error) {
-        console.warn("setAutoLock error:", error);
-        try { await lock.disconnect(); } catch (e) {}
-        return false;
+        console.error(error);
       }
     }
     return false;
@@ -247,13 +251,10 @@ class Manager extends EventEmitter {
         return false;
       }
       try {
-        const res = await runWithTimeout(
-          lock.addPassCode(type, passCode, startDate, endDate), 10000, "addPassCode");
+        const res = await lock.addPassCode(type, passCode, startDate, endDate);
         return res;
       } catch (error) {
-        console.warn("addPasscode error:", error);
-        try { await lock.disconnect(); } catch (e) {}
-        return false;
+        console.error(error);
       }
     }
     return false;
@@ -269,13 +270,10 @@ class Manager extends EventEmitter {
         return false;
       }
       try {
-        const res = await runWithTimeout(
-          lock.updatePassCode(type, oldPasscode, newPasscode, startDate, endDate), 10000, "updatePassCode");
+        const res = await lock.updatePassCode(type, oldPasscode, newPasscode, startDate, endDate);
         return res;
       } catch (error) {
-        console.warn("updatePasscode error:", error);
-        try { await lock.disconnect(); } catch (e) {}
-        return false;
+        console.error(error);
       }
     }
     return false;
@@ -291,13 +289,10 @@ class Manager extends EventEmitter {
         return false;
       }
       try {
-        const res = await runWithTimeout(
-          lock.deletePassCode(type, passCode), 8000, "deletePassCode");
+        const res = await lock.deletePassCode(type, passCode);
         return res;
       } catch (error) {
-        console.warn("deletePasscode error:", error);
-        try { await lock.disconnect(); } catch (e) {}
-        return false;
+        console.error(error);
       }
     }
     return false;
@@ -313,13 +308,10 @@ class Manager extends EventEmitter {
         return false;
       }
       try {
-        const passcodes = await runWithTimeout(
-          lock.getPassCodes(), 8000, "getPassCodes");
+        const passcodes = await lock.getPassCodes();
         return passcodes;
       } catch (error) {
-        console.warn("getPasscodes error:", error);
-        try { await lock.disconnect(); } catch (e) {}
-        return false;
+        console.error(error);
       }
     }
     return false;
@@ -335,14 +327,11 @@ class Manager extends EventEmitter {
         return false;
       }
       try {
-        const card = await runWithTimeout(
-          lock.addICCard(startDate, endDate), 12000, "addICCard");
+        const card = await lock.addICCard(startDate, endDate);
         store.setCardAlias(card, alias);
         return card;
       } catch (error) {
-        console.warn("addCard error:", error);
-        try { await lock.disconnect(); } catch (e) {}
-        return false;
+        console.error(error);
       }
     }
     return false;
@@ -358,14 +347,11 @@ class Manager extends EventEmitter {
         return false;
       }
       try {
-        const result = await runWithTimeout(
-          lock.updateICCard(card, startDate, endDate), 10000, "updateICCard");
+        const result = await lock.updateICCard(card, startDate, endDate);
         store.setCardAlias(card, alias);
         return result;
       } catch (error) {
-        console.warn("updateCard error:", error);
-        try { await lock.disconnect(); } catch (e) {}
-        return false;
+        console.error(error);
       }
     }
     return false;
@@ -381,14 +367,11 @@ class Manager extends EventEmitter {
         return false;
       }
       try {
-        const result = await runWithTimeout(
-          lock.deleteICCard(card), 8000, "deleteICCard");
+        const result = await lock.deleteICCard(card);
         store.deleteCardAlias(card);
         return result;
       } catch (error) {
-        console.warn("deleteCard error:", error);
-        try { await lock.disconnect(); } catch (e) {}
-        return false;
+        console.error(error);
       }
     }
     return false;
@@ -404,8 +387,7 @@ class Manager extends EventEmitter {
         return false;
       }
       try {
-        let cards = await runWithTimeout(
-          lock.getICCards(), 8000, "getICCards");
+        let cards = await lock.getICCards();
         if (cards.length > 0) {
           for (let card of cards) {
             card.alias = store.getCardAlias(card.cardNumber);
@@ -413,9 +395,7 @@ class Manager extends EventEmitter {
         }
         return cards;
       } catch (error) {
-        console.warn("getCards error:", error);
-        try { await lock.disconnect(); } catch (e) {}
-        return false;
+        console.error(error);
       }
     }
     return false;
@@ -431,14 +411,11 @@ class Manager extends EventEmitter {
         return false;
       }
       try {
-        const finger = await runWithTimeout(
-          lock.addFingerprint(startDate, endDate), 12000, "addFingerprint");
+        const finger = await lock.addFingerprint(startDate, endDate);
         store.setFingerAlias(finger, alias);
         return finger;
       } catch (error) {
-        console.warn("addFinger error:", error);
-        try { await lock.disconnect(); } catch (e) {}
-        return false;
+        console.error(error);
       }
     }
     return false;
@@ -454,14 +431,11 @@ class Manager extends EventEmitter {
         return false;
       }
       try {
-        const result = await runWithTimeout(
-          lock.updateFingerprint(finger, startDate, endDate), 10000, "updateFingerprint");
+        const result = await lock.updateFingerprint(finger, startDate, endDate);
         store.setFingerAlias(finger, alias);
         return result;
       } catch (error) {
-        console.warn("updateFinger error:", error);
-        try { await lock.disconnect(); } catch (e) {}
-        return false;
+        console.error(error);
       }
     }
     return false;
@@ -477,14 +451,11 @@ class Manager extends EventEmitter {
         return false;
       }
       try {
-        const result = await runWithTimeout(
-          lock.deleteFingerprint(finger), 8000, "deleteFingerprint");
+        const result = await lock.deleteFingerprint(finger);
         store.deleteFingerAlias(finger);
         return result;
       } catch (error) {
-        console.warn("deleteFinger error:", error);
-        try { await lock.disconnect(); } catch (e) {}
-        return false;
+        console.error(error);
       }
     }
     return false;
@@ -500,8 +471,7 @@ class Manager extends EventEmitter {
         return false;
       }
       try {
-        let fingers = await runWithTimeout(
-          lock.getFingerprints(), 8000, "getFingerprints");
+        let fingers = await lock.getFingerprints();
         if (fingers.length > 0) {
           for (let finger of fingers) {
             finger.alias = store.getFingerAlias(finger.fpNumber);
@@ -509,9 +479,7 @@ class Manager extends EventEmitter {
         }
         return fingers;
       } catch (error) {
-        console.warn("getFingers error:", error);
-        try { await lock.disconnect(); } catch (e) {}
-        return false;
+        console.error(error);
       }
     }
     return false;
@@ -528,15 +496,11 @@ class Manager extends EventEmitter {
       }
       try {
         const sound = audio == true ? AudioManage.TURN_ON : AudioManage.TURN_OFF;
-        const res = await runWithTimeout(
-          lock.setLockSound(sound), 8000, "setLockSound"
-        );
+        const res = await lock.setLockSound(sound);
         this.emit("lockUpdated", lock);
         return res;
       } catch (error) {
-        console.warn("setAudio error:", error);
-        try { await lock.disconnect(); } catch (e) {}
-        return false;
+        console.error(error);
       }
     }
     return false;
@@ -552,9 +516,9 @@ class Manager extends EventEmitter {
         return false;
       }
       try {
-        let operations = JSON.parse(JSON.stringify(
-          await runWithTimeout(lock.getOperationLog(true, reload), 10000, "getOperationLog")));
+        let operations = JSON.parse(JSON.stringify(await lock.getOperationLog(true, reload)));
         let validOperations = [];
+        // console.log(operations);
         for (let operation of operations) {
           if (operation) {
             operation.recordTypeName = LogOperateNames[operation.recordType];
@@ -579,8 +543,7 @@ class Manager extends EventEmitter {
         }
         return validOperations;
       } catch (error) {
-        console.warn("getOperationLog error:", error);
-        try { await lock.disconnect(); } catch (e) {}
+        console.error(error);
       }
     } else {
       return false;
@@ -594,8 +557,7 @@ class Manager extends EventEmitter {
         return false;
       }
       try {
-        const res = await runWithTimeout(
-          lock.resetLock(), 12000, "resetLock");
+        const res = await lock.resetLock();
         if (res) {
           lock.removeAllListeners();
           this.pairedLocks.delete(address);
@@ -603,28 +565,28 @@ class Manager extends EventEmitter {
         }
         return res;
       } catch (error) {
-        console.warn("resetLock error:", error);
-        try { await lock.disconnect(); } catch (e) {}
-        return false;
+        console.error(error);
       }
     }
     return false;
   }
 
+  /**
+   * 
+   * @param {import('ttlock-sdk-js').TTLock} lock 
+   * @param {boolean} readData 
+   */
   async _connectLock(lock, readData = true) {
     if (this.scanning) return false;
     if (!lock.isConnected()) {
       try {
-        const res = await runWithTimeout(
-          lock.connect(!readData), 10000, "connect"
-        );
+        const res = await lock.connect(!readData);
         if (!res) {
           console.log("Connect to lock failed", lock.getAddress());
           return false;
         }
       } catch (error) {
-        console.warn("connectLock error:", error);
-        try { await lock.disconnect(); } catch (e) {}
+        console.error(error);
         return false;
       }
       return true;
@@ -646,55 +608,56 @@ class Manager extends EventEmitter {
       if (this.pairedLocks.has(address)) {
         let lock = this.pairedLocks.get(address);
         console.log("Auto connect to", address);
-        try {
-          const result = await runWithTimeout(lock.connect(), 8000, "connect");
-          if (result === true) {
-            await lock.disconnect();
-            console.log("Successful connect attempt to paired lock", address);
-            this.connectQueue.delete(address);
-          } else {
-            console.log("Unsuccessful connect attempt to paired lock", address);
-          }
-        } catch (error) {
-          console.warn("refresh connectQueue error:", error);
-          try { await lock.disconnect(); } catch (e) {}
+        const result = await lock.connect();
+        if (result === true) {
+          await lock.disconnect();
+          console.log("Successful connect attempt to paired lock", address);
+          this.connectQueue.delete(address);
+        } else {
+          console.log("Unsuccessful connect attempt to paired lock", address);
         }
       }
     }
+
     this.emit("scanStop");
     setTimeout(() => {
       this.client.startMonitor();
     }, 200);
   }
 
+  /**
+   * 
+   * @param {import('ttlock-sdk-js').TTLock} lock 
+   */
   async _onFoundLock(lock) {
     let listChanged = false;
     if (lock.isPaired()) {
+      // check if lock is known
       if (!this.pairedLocks.has(lock.getAddress())) {
         this._bindLockEvents(lock);
+        // add it to the list of known locks and connect it
         console.log("Discovered paired lock:", lock.getAddress());
         if (this.client.isMonitoring()) {
-          try {
-            const result = await runWithTimeout(lock.connect(), 8000, "connect");
-            if (result == true) {
-              console.log("Successful connect attempt to paired lock", lock.getAddress());
-              await this._processOperationLog(lock);
-            } else {
-              console.log("Unsuccessful connect attempt to paired lock", lock.getAddress());
-              this.connectQueue.add(lock.getAddress());
-            }
-            await lock.disconnect();
-          } catch (error) {
-            console.warn("foundLock connect error:", error);
-            try { await lock.disconnect(); } catch (e) {}
+          const result = await lock.connect();
+          if (result == true) {
+            console.log("Successful connect attempt to paired lock", lock.getAddress());
+            await this._processOperationLog(lock);
+          } else {
+            console.log("Unsuccessful connect attempt to paired lock", lock.getAddress());
+            this.connectQueue.add(lock.getAddress());
           }
+          await lock.disconnect();
         } else {
+          // add it to the connect queue
           this.connectQueue.add(lock.getAddress());
         }
         listChanged = true;
       }
     } else if (!lock.isInitialized()) {
       if (!this.newLocks.has(lock.getAddress())) {
+        // this._bindLockEvents(lock);
+        // check if lock is in pairing mode
+        // add it to the list of new locks, ready to be initialized
         console.log("Discovered new lock:", lock.toJSON());
         this.newLocks.set(lock.getAddress(), lock);
         listChanged = true;
@@ -706,6 +669,7 @@ class Manager extends EventEmitter {
     } else {
       console.log("Discovered unknown lock:", lock.toJSON());
     }
+
     if (listChanged) {
       this.emit("lockListChanged");
     }
@@ -715,6 +679,10 @@ class Manager extends EventEmitter {
     store.setLockData(this.client.getLockData());
   }
 
+  /**
+   * 
+   * @param {import('ttlock-sdk-js').TTLock} lock 
+   */
   _bindLockEvents(lock) {
     lock.on("connected", this._onLockConnected.bind(this));
     lock.on("disconnected", this._onLockDisconnected.bind(this));
@@ -726,6 +694,10 @@ class Manager extends EventEmitter {
     lock.on("scanFRProgress", () => this.emit("lockFingerScanProgress", lock));
   }
 
+  /**
+   * 
+   * @param {import('ttlock-sdk-js').TTLock} lock 
+   */
   async _onLockConnected(lock) {
     if (lock.isPaired()) {
       this.pairedLocks.set(lock.getAddress(), lock);
@@ -736,79 +708,86 @@ class Manager extends EventEmitter {
     }
   }
 
+  /**
+   * 
+   * @param {import('ttlock-sdk-js').TTLock} lock 
+   */
   async _onLockDisconnected(lock) {
     console.log("Disconnected from lock " + lock.getAddress());
     this.client.startMonitor();
   }
 
+  /**
+   * 
+   * @param {import('ttlock-sdk-js').TTLock} lock 
+   */
   async _onLockLocked(lock) {
     this.emit("lockLock", lock);
   }
 
+  /**
+   * 
+   * @param {import('ttlock-sdk-js').TTLock} lock 
+   */
   async _onLockUnlocked(lock) {
     this.emit("lockUnlock", lock);
   }
 
+  /**
+   * 
+   * @param {import('ttlock-sdk-js').TTLock} lock 
+   */
   async _onLockUpdated(lock, paramsChanged) {
     console.log("lockUpdated", paramsChanged);
+    // if lock has new operations read the operations and send updates
     if (paramsChanged.newEvents == true && lock.hasNewEvents()) {
       if (!lock.isConnected()) {
-        try {
-          const result = await runWithTimeout(lock.connect(), 8000, "connect");
-        } catch (error) {
-          console.warn("onLockUpdated connect error:", error);
-        }
+        const result = await lock.connect();
+        // TODO: handle failed connection
       }
       await this._processOperationLog(lock);
     }
     if (paramsChanged.lockedStatus == true) {
-      try {
-        const status = await runWithTimeout(lock.getLockStatus(), 5000, "getLockStatus");
-        if (status == LockedStatus.LOCKED) {
-          console.log(">>>>>> Lock is now locked from new event <<<<<<");
-          this.emit("lockLock", lock);
-        }
-      } catch (error) {
-        console.warn("onLockUpdated getLockStatus error:", error);
+      const status = await lock.getLockStatus();
+      if (status == LockedStatus.LOCKED) {
+        console.log(">>>>>> Lock is now locked from new event <<<<<<");
+        this.emit("lockLock", lock);
       }
     }
     if (paramsChanged.batteryCapacity == true) {
       this.emit("lockUpdated", lock);
     }
-    try { await lock.disconnect(); } catch (e) {}
+
+    await lock.disconnect();
   }
 
   async _processOperationLog(lock) {
-    try {
-      let operations = await runWithTimeout(lock.getOperationLog(), 10000, "getOperationLog");
-      let lastStatus = LockedStatus.UNKNOWN;
-      for (let op of operations) {
-        if (LogOperateCategory.UNLOCK.includes(op.recordType)) {
-          lastStatus = LockedStatus.UNLOCKED;
-          console.log(">>>>>> Lock was unlocked <<<<<<");
-          this.emit("lockUnlock", lock);
-        } else if (LogOperateCategory.LOCK.includes(op.recordType)) {
-          lastStatus = LockedStatus.LOCKED;
-          console.log(">>>>>> Lock was locked <<<<<<");
-          this.emit("lockLock", lock);
-        }
+    let operations = await lock.getOperationLog();
+    let lastStatus = LockedStatus.UNKNOWN;
+    for (let op of operations) {
+      if (LogOperateCategory.UNLOCK.includes(op.recordType)) {
+        lastStatus = LockedStatus.UNLOCKED;
+        console.log(">>>>>> Lock was unlocked <<<<<<");
+        this.emit("lockUnlock", lock);
+      } else if (LogOperateCategory.LOCK.includes(op.recordType)) {
+        lastStatus = LockedStatus.LOCKED;
+        console.log(">>>>>> Lock was locked <<<<<<");
+        this.emit("lockLock", lock);
       }
-      const status = await runWithTimeout(lock.getLockStatus(), 5000, "getLockStatus");
-      if (lastStatus != LockedStatus.UNKNOWN && status != lastStatus) {
-        if (status == LockedStatus.LOCKED) {
-          console.log(">>>>>> Lock is now locked <<<<<<");
-          this.emit("lockLock", lock);
-        } else if (status == LockedStatus.UNLOCKED) {
-          console.log(">>>>>> Lock is now unlocked <<<<<<");
-          this.emit("lockUnlock", lock);
-        }
+    }
+    const status = await lock.getLockStatus();
+    if (lastStatus != LockedStatus.UNKNOWN && status != lastStatus) {
+      if (status == LockedStatus.LOCKED) {
+        console.log(">>>>>> Lock is now locked <<<<<<");
+        this.emit("lockLock", lock);
+      } else if (status == LockedStatus.UNLOCKED) {
+        console.log(">>>>>> Lock is now unlocked <<<<<<");
+        this.emit("lockUnlock", lock);
       }
-    } catch (error) {
-      console.warn("processOperationLog error:", error);
-      try { await lock.disconnect(); } catch (e) {}
     }
   }
 
+  /** Stop scan after 30 seconds */
   async _scanTimer() {
     if (typeof this.scanTimer == "undefined") {
       this.scanTimer = setTimeout(() => {
