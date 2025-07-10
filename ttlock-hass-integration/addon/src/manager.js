@@ -12,27 +12,26 @@ const ScanType = Object.freeze({
 
 const SCAN_MAX = 3;
 
+async function runWithTimeout(promise, ms, description = "operation") {
+  let timeout;
+  const timeoutPromise = new Promise((_, reject) => {
+    timeout = setTimeout(() => reject(new Error(`${description} timed out after ${ms}ms`)), ms);
+  });
+  try {
+    return await Promise.race([promise, timeoutPromise]);
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 /**
  * Sleep for
  * @param ms miliseconds
  */
-function sleep(ms) {
-  return new Promise(resolve => setTimeout(resolve, ms));
-}
-
-/**
- * Wrap a BLE command promise with a timeout
- */
-async function withTimeout(promise, ms, label) {
-  let timer;
-  const timeout = new Promise((_, reject) => {
-    timer = setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms);
+async function sleep(ms) {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
   });
-  try {
-    return await Promise.race([promise, timeout]);
-  } finally {
-    clearTimeout(timer);
-  }
 }
 /**
  * Events:
@@ -66,18 +65,6 @@ class Manager extends EventEmitter {
     this.gateway_key = "";
     this.gateway_user = "";
     this.gateway_pass = "";
-  }
-
-  async _disconnectLock(lock) {
-    try {
-      if (typeof lock.disconnect === 'function') {
-        await lock.disconnect();
-      } else if (this.client && typeof this.client.disconnectLock === 'function') {
-        await this.client.disconnectLock(lock.getAddress());
-      }
-    } catch (err) {
-      console.warn('Warning: disconnectLock failed', err);
-    }
   }
 
   async init() {
@@ -184,65 +171,27 @@ class Manager extends EventEmitter {
    */
   async initLock(address) {
     const lock = this.newLocks.get(address);
-    if (!lock) return false;
-
-    // Ensure BLE connection
-    if (!(await this._connectLock(lock))) return false;
-
-    try {
-      // 1) Auto-lock time
-      try {
-        lock.autoLockTime = await withTimeout(lock.getAutolockTime(), 5000, 'getAutolockTime');
-      } catch (err) {
-        console.warn('getAutolockTime failed or timed out, reconnecting...', err);
-        await this._disconnectLock(lock);
-        await sleep(100);
-        await this._connectLock(lock);
+    if (typeof lock != "undefined") {
+      if (!(await this._connectLock(lock))) {
+        return false;
       }
-
-      // 2) Lock status
       try {
-        lock.locked = await withTimeout(lock.getLockStatus(), 5000, 'getLockStatus');
-      } catch (err) {
-        console.warn('getLockStatus failed or timed out, reconnecting...', err);
-        await this._disconnectLock(lock);
-        await sleep(100);
-        await this._connectLock(lock);
+        let res = await lock.initLock();
+        if (res != false) {
+          this.pairedLocks.set(lock.getAddress(), lock);
+          this.newLocks.delete(lock.getAddress());
+          this._bindLockEvents(lock);
+          this.emit("lockPaired", lock);
+          return true;
+        }
+        return false;
+      } catch (error) {
+        console.error(error);
+        return false;
       }
-
-      // 3) Audio mode
-      try {
-        const mode = await withTimeout(lock.getLockSound(), 5000, 'getLockSound');
-        lock.audio = (mode === AudioManage.TURN_ON);
-      } catch (err) {
-        console.warn('getLockSound failed or timed out, reconnecting...', err);
-        await this._disconnectLock(lock);
-        await sleep(100);
-        await this._connectLock(lock);
-      }
-
-      // 4) Calibrate time
-      try {
-        await withTimeout(lock.calibrateTimeCommand(), 5000, 'calibrateTimeCommand');
-      } catch (err) {
-        console.warn('calibrateTimeCommand failed or timed out, reconnecting...', err);
-        await this._disconnectLock(lock);
-        await sleep(100);
-        await this._connectLock(lock);
-      }
-
-      // Finalize
-      this.pairedLocks.set(lock.getAddress(), lock);
-      this.newLocks.delete(lock.getAddress());
-      this._bindLockEvents(lock);
-      this.emit("lockPaired", lock);
-      return true;
-    } catch (error) {
-      console.error('initLock sequence failed', error);
-      return false;
     }
+    return false;
   }
-
 
   async unlockLock(address) {
     const lock = this.pairedLocks.get(address);
@@ -551,24 +500,26 @@ class Manager extends EventEmitter {
   async setAudio(address, audio) {
     const lock = this.pairedLocks.get(address);
     if (typeof lock != "undefined") {
-      if (!lock.hasLockSound()) {
-        return false;
-      }
-      if (!(await this._connectLock(lock))) {
-        return false;
-      }
+      if (!lock.hasLockSound()) return false;
+      if (!(await this._connectLock(lock))) return false;
       try {
         const sound = audio == true ? AudioManage.TURN_ON : AudioManage.TURN_OFF;
-        const res = await lock.setLockSound(sound);
+        const res = await runWithTimeout(
+          lock.setLockSound(sound),
+          7000,
+          "setLockSound"
+        );
         this.emit("lockUpdated", lock);
         return res;
       } catch (error) {
-        console.error(error);
+        console.warn("setAudio error:", error);
+        try { await lock.disconnect(); } catch (e) {}
+        return false;
       }
     }
     return false;
   }
-
+  
   async getOperationLog(address, reload) {
     const lock = this.pairedLocks.get(address);
     if (typeof reload == "undefined") {
