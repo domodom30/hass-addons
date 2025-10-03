@@ -9,7 +9,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/kind3r/ttlock-hass-integration.git"
+    "url": "git+https://github.com/domodom30/ttlock-hass-integration.git"
   },
   "keywords": [
     "ttlock",
@@ -24,9 +24,9 @@
   "author": "Emanuel Posescu <kind3r@gmail.com>",
   "license": "GPL-3.0",
   "bugs": {
-    "url": "https://github.com/kind3r/hass-addons/issues"
+    "url": "https://github.com/domodom30/hass-addons/issues"
   },
-  "homepage": "https://github.com/kind3r/hass-addons/tree/master/ttlock-hass-integration",
+  "homepage": "https://github.com/domodom30/hass-addons/tree/master/ttlock-hass-integration",
   "dependencies": {
     "async-mqtt": "^2.6.1",
     "express": "^4.17.1",
