@@ -296,6 +296,20 @@ class HomeAssistant {
         }
       },
       {
+        component: 'sensor',
+        objectId: 'last_user',
+        payload: {
+          unique_id: 'ttlock_' + id + '_last_user',
+          name: name + ' Last user',
+          device: device,
+          icon: 'mdi:account',
+          state_topic: lastUnlockTopic(id),
+          value_template: "{{ value_json.by if value_json.by else '—' }}",
+          json_attributes_topic: lastUnlockTopic(id),
+          ...avail
+        }
+      },
+      {
         component: 'binary_sensor',
         objectId: 'connectivity',
         payload: {
@@ -530,6 +544,7 @@ class HomeAssistant {
       discoveryConfigTopic(this.discovery_prefix, 'sensor', id, 'last_access'),
       discoveryConfigTopic(this.discovery_prefix, 'sensor', id, 'last_operation_time'),
       discoveryConfigTopic(this.discovery_prefix, 'sensor', id, 'last_access_time'),
+      discoveryConfigTopic(this.discovery_prefix, 'sensor', id, 'last_user'),
       discoveryConfigTopic(this.discovery_prefix, 'binary_sensor', id, 'connectivity')
     ];
     for (const topic of discoveryTopics) {

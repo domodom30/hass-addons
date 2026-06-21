@@ -1,6 +1,14 @@
 # Changelog
 
-## [2.5.1] - 2026-06-21
+## [2.5.3] - 2026-06-21
+
+### New MQTT sensor: Last user
+
+- **`last_user` (sensor)**: new MQTT discovery entity exposing the `by` field from the `last_unlock` payload (`ttlock/<id>/last_unlock`). State shows the IC card alias, fingerprint alias, or PIN code used to open the lock. Displays `—` when access comes from the TTLock app or a BLE admin session (`by` is null)
+- No backend change required: the `by` field was already published by `buildLastOperationPayload()` — only the MQTT discovery declaration is added in `ha.js`
+- Discovery topic is properly cleaned up when a lock is unpaired
+
+## [2.5.2] - 2026-06-21
 
 ### Fix: global BLE radio mutex — serialization across locks
 
@@ -8,7 +16,7 @@
 - **`_acquireMutex` rewritten**: each caller chains onto `_radioChain` and waits for the previous holder to release before attempting its own connection. The release function is now idempotent (via a `released` flag) — a double-call no longer advances the chain twice or prematurely unblocks the next waiter
 - The per-address `_bleMutex` is kept for existing guards (`isLockBusy`, `_bleMutex.size > 0` in `_onScanStopped` and `_ensureMonitoring`) — their semantics remain correct since with global serialization the map holds at most one entry at a time
 
-## [2.5.0] - 2026-06-19
+## [2.5.1] - 2026-06-21
 
 ### Cleaner BLE `macro_adminLogin` error messages
 
@@ -16,12 +24,14 @@
 - **`_doAdminLogin` catch**: the message now includes the MAC address and translates `No response to checkAdmin` into a plain-language description: `[<address>] BLE admin login failed — lock out of range or busy (no response to checkAdmin)`
 - **`_processOperationLog` adminAuth guard**: message reformatted with address prefix and more explicit cause: `_processOperationLog [<address>]: adminAuth missing — BLE admin auth failed or disconnected during read`
 
-## [1.9.23] - 2026-05-20
+
+## [2.5.0] - 2026-06-19
 
 ### Sensor anomaly icon in the activity log
 
 - **ALARM category**: `_enrichOperation()` in `manager.js` now maps `LogOperateCategory.ALARM` (DOOR_SENSOR_ANOMALY, TAMPER_ALARM, LOW_BATTERY_ALARM…) to `recordTypeCategory = 'ALARM'` instead of `'OTHER'`
 - **`mdi-shield-lock-open` icon**: ALARM entries display the icon in orange in `OperationsAll.vue` and `Operations.vue`
+
 
 ## [1.9.22] - 2026-05-20
 
