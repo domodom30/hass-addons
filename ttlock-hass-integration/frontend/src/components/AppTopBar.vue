@@ -6,13 +6,13 @@
     border="b-thin"
     height="56"
   >
-    <!-- GAUCHE : logo + titre (cliquable → tableau de bord) -->
+
     <router-link to="/" class="d-flex align-center gap-2 px-3 text-decoration-none home-link">
       <!-- Logo avec tooltip version -->
       <v-tooltip :text="`TTLock v${version}`" location="bottom">
         <template #activator="{ props }">
-          <v-avatar v-bind="props" size="32" color="primary" style="flex-shrink: 0;">
-            <v-icon color="white" size="20">mdi-lock-smart</v-icon>
+          <v-avatar v-bind="props" size="32" style="flex-shrink: 0;">
+            <v-img :src="iconImg" width="32" height="32" />
           </v-avatar>
         </template>
       </v-tooltip>
@@ -212,13 +212,14 @@
 
 <script>
 import { useTheme } from '@/composables/useTheme'
+import iconImg from '@/assets/icon.png'
 
 export default {
   name: 'AppTopBar',
   emits: ['edit-config', 'start-scan', 'refresh-credentials'],
   setup() {
     const { isDark, toggleTheme } = useTheme()
-    return { isDark, toggleTheme }
+    return { isDark, toggleTheme, iconImg }
   },
   computed: {
     version() {
