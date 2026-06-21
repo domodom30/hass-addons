@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.5.1] - 2026-06-21
+
+### Fix: global BLE radio mutex — serialization across locks
+
+- **`_radioChain` (constructor)**: added a global promise chain to serialize BLE radio access across all locks. The previous per-address mutex allowed two different locks to attempt a GATT connection simultaneously, causing collisions where both `connect()` calls failed or returned `false`
+- **`_acquireMutex` rewritten**: each caller chains onto `_radioChain` and waits for the previous holder to release before attempting its own connection. The release function is now idempotent (via a `released` flag) — a double-call no longer advances the chain twice or prematurely unblocks the next waiter
+- The per-address `_bleMutex` is kept for existing guards (`isLockBusy`, `_bleMutex.size > 0` in `_onScanStopped` and `_ensureMonitoring`) — their semantics remain correct since with global serialization the map holds at most one entry at a time
+
 ## [2.5.0] - 2026-06-19
 
 ### Cleaner BLE `macro_adminLogin` error messages

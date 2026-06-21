@@ -1,6 +1,6 @@
 {
   "name": "TTLock",
-  "version": "2.5.0",
+  "version": "2.5.1",
   "slug": "ttlock-hass-integration",
   "description": "Integration of the offline TTLock SDK into Home Assistant",
   "url": "https://github.com/domodom30/hass-addons",
@@ -11,6 +11,7 @@
   "hassio_api": true,
   "host_network": true,
   "host_dbus": true,
+  "privileged": ["NET_ADMIN", "NET_RAW"],
   "auth_api": true,
   "ingress": true,
   "ingress_port": 55099,

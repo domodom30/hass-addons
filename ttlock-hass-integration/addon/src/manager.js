@@ -61,6 +61,13 @@ class Manager extends EventEmitter {
     this.connectRetryTimers = new Map();
     /** @type {Map<string, Promise<void>>} Per-lock BLE mutex tail (serializes BLE access on a given address) */
     this._bleMutex = new Map();
+    /**
+     * @type {Promise<void>} Global BLE-radio serialization chain. A single BLE adapter can
+     * only hold one GATT connection at a time — per-address locking let connects to different
+     * locks run concurrently and collide (both `connect()` return false / time out). Every
+     * _acquireMutex caller now waits on this chain so exactly one lock holds the radio at once.
+     */
+    this._radioChain = Promise.resolve();
     /** @type {Map<string, () => void>} Active mutex release functions keyed by address — held between _connectLock and _releaseConnect */
     this._mutexReleases = new Map();
     /** @type {Map<string, boolean>} Last known audio (lockSound) status per lock — populated by successful BLE reads/writes */
@@ -500,9 +507,13 @@ class Manager extends EventEmitter {
   async initLock(address) {
     const lock = this.newLocks.get(address);
     if (lock === undefined) return false;
-    if (!(await this._connectLock(lock))) return false;
+    // needsAdmin=false: a new/unpaired lock has no admin credentials yet. Running
+    // macro_adminLogin (checkAdmin) before init fails with "No response to checkAdmin"
+    // / NO_PERMISSION and burns all connect attempts before initLock() ever runs.
+    // The SDK establishes admin credentials as part of initLock()'s own handshake.
+    if (!(await this._connectLock(lock, false))) return false;
     try {
-      const res = await lock.initLock();
+      const res = await withTimeout(lock.initLock(), 40000, 'initLock ' + address);
       if (res !== false) {
         this.pairedLocks.set(lock.getAddress(), lock);
         this.newLocks.delete(lock.getAddress());
@@ -1371,29 +1382,38 @@ class Manager extends EventEmitter {
   }
 
   /**
-   * Acquire the per-address BLE mutex. Returns a release function. Callers must
-   * always invoke the release function (typically via try/finally), even on error.
+   * Acquire the BLE radio. Serializes globally across ALL locks: a single BLE adapter can
+   * only sustain one GATT connection at a time, so connects to different addresses must not
+   * overlap (they collide and both fail). Returns a release function. Callers must always
+   * invoke it (typically via try/finally), even on error — a missed release stalls every
+   * lock, not just this one.
+   *
+   * The per-address `_bleMutex` entry is kept for the existing book-keeping/guards
+   * (`isLockBusy`, the `_bleMutex.size > 0` monitor-restart checks): with global
+   * serialization the map holds at most one entry, so `size > 0` still means "radio busy".
    * @param {string} address
    * @returns {Promise<() => void>}
    */
   async _acquireMutex(address) {
-    while (this._bleMutex.has(address)) {
-      try {
-        await this._bleMutex.get(address);
-      } catch (err) {
-        // The promise stored in _bleMutex was rejected (e.g. the holder threw).
-        // Swallow the rejection — we just need to re-check if the mutex is free.
-        console.debug('_acquireMutex: mutex promise rejected, retrying', err);
-      }
-    }
+    // Chain onto the global radio queue: capture the current tail, then append our turn so
+    // the next caller waits for us. Awaiting `prev` blocks until the previous holder releases.
+    const prev = this._radioChain;
+    let releaseRadio;
+    const myTurn = new Promise((r) => (releaseRadio = r));
+    this._radioChain = prev.then(() => myTurn);
+    await prev.catch(() => {}); // a rejected predecessor must not wedge the chain
     let release;
     const promise = new Promise((r) => (release = r));
     this._bleMutex.set(address, promise);
+    let released = false;
     return () => {
+      if (released) return; // idempotent: double release must not advance the chain twice
+      released = true;
       if (this._bleMutex.get(address) === promise) {
         this._bleMutex.delete(address);
       }
       release();
+      releaseRadio(); // hand the radio to the next waiter
     };
   }
 
@@ -2179,7 +2199,28 @@ class Manager extends EventEmitter {
       // autorisant le retour du cache oplog sans connexion admin réelle. On remet adminAuth
       // à false pour garantir que chaque appel à getOperationLog() ici effectue un vrai login.
       lock.adminAuth = false;
-      let operations = await lock.getOperationLog();
+      // Bound the read like the manual path (getOperationLog above): a record with a
+      // bad CRC makes the SDK's internal fetch loop re-read the same entries forever
+      // (the read pointer never advances), holding the BLE mutex indefinitely and
+      // starving every user op (unlock/lock) on _acquireMutex. Force-disconnect on
+      // timeout so the SDK loop exits via its `if(!isConnected) break` path and the
+      // mutex is released.
+      let timeoutHandle;
+      const operationsPromise = lock.getOperationLog();
+      const timeoutPromise = new Promise((_, reject) => {
+        timeoutHandle = setTimeout(async () => {
+          console.warn(`_processOperationLog [${lock.getAddress()}]: lecture oplog bloquée (CRC corrompu?) — déconnexion forcée`);
+          if (lock.isConnected()) await lock.disconnect().catch(() => {});
+          await sleep(1000);
+          reject(new Error('BLE timeout (_processOperationLog oplog read)'));
+        }, 30000);
+      });
+      let operations;
+      try {
+        operations = await Promise.race([operationsPromise, timeoutPromise]);
+      } finally {
+        clearTimeout(timeoutHandle);
+      }
       // Vérifier adminAuth APRÈS l'appel. Le SDK le positionne à true uniquement si
       // macro_adminLogin réussit (checkAdmin + checkRandom BLE) ET si la serrure ne
       // s'est pas encore déconnectée (onDisconnected remet adminAuth à false). Si
