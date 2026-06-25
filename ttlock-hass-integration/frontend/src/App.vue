@@ -1,39 +1,105 @@
 <template>
   <v-app>
-    <AppTopBar
-      @edit-config="editConfig"
-      @start-scan="startScan"
-      @refresh-credentials="refreshCredentials"
-    />
+    <AppTopBar />
 
     <v-main class="bg-background">
       <div class="page-container">
-
-        <v-breadcrumbs
-          v-if="showBreadcrumbs"
-          :items="breadcrumbs"
-          density="compact"
-          class="pa-0 mb-4"
-        >
-          <template #divider>
-            <v-icon icon="mdi-chevron-right" size="16" class="text-medium-emphasis" />
-          </template>
-          <template #item="{ item }">
-            <v-breadcrumbs-item
-              :to="item.to"
-              :disabled="item.disabled"
-              class="text-body-2"
-              :class="item.disabled ? 'text-high-emphasis font-weight-medium' : 'text-medium-emphasis'"
-            >
-              {{ item.title }}
-            </v-breadcrumbs-item>
-          </template>
-        </v-breadcrumbs>
-
         <router-view />
       </div>
 
-      <ConfigDlg :show="showConfigDialog" v-on:cancel="hideConfigDialog" />
+      <!-- FAB d'ajout (assistant d'appairage) -->
+      <v-tooltip :text="$t('wizard.title')" location="start">
+        <template #activator="{ props }">
+          <v-btn
+            v-bind="props"
+            class="add-fab"
+            color="primary"
+            icon="mdi-plus"
+            size="large"
+            elevation="6"
+            @click="openWizard"
+          />
+        </template>
+      </v-tooltip>
+
+      <!-- Overlays (modèle page unique façon ESPHome) -->
+      <ConfigDlg :show="overlay === 'config'" @cancel="clearOverlay" />
+      <LockLogsDialog />
+      <AddLockWizard />
+
+      <!-- Credentials overlay -->
+      <v-dialog
+        :model-value="overlay === 'credentials'"
+        max-width="760"
+        scrollable
+        transition="dialog-bottom-transition"
+        @update:model-value="clearOverlay"
+      >
+        <v-card>
+          <div class="d-flex align-center ga-3 px-5 py-3">
+            <v-avatar size="36" color="warning" variant="tonal">
+              <v-icon size="20">mdi-key-chain</v-icon>
+            </v-avatar>
+            <div class="flex-grow-1 overflow-hidden">
+              <div class="text-subtitle-1 font-weight-bold text-truncate">{{ $t('lock.credentials') }}</div>
+              <div class="text-caption text-medium-emphasis text-truncate">
+                {{ activeLockName }} · <span class="font-mono">{{ overlayAddress }}</span>
+              </div>
+            </div>
+            <v-tooltip :text="$t('app.refreshCredentials')" location="bottom">
+              <template #activator="{ props }">
+                <v-btn
+                  v-bind="props"
+                  :icon="waitingCredentials ? null : 'mdi-refresh'"
+                  :loading="waitingCredentials"
+                  variant="text"
+                  size="small"
+                  @click="refreshCredentials"
+                />
+              </template>
+            </v-tooltip>
+            <v-btn icon="mdi-close" variant="text" size="small" @click="clearOverlay" />
+          </div>
+          <v-divider />
+          <v-card-text class="pa-4">
+            <CredentialsManager v-if="overlay === 'credentials' && overlayAddress" :key="overlayAddress" :address="overlayAddress" />
+          </v-card-text>
+        </v-card>
+      </v-dialog>
+
+      <!-- Settings overlay -->
+      <v-dialog
+        :model-value="overlay === 'settings'"
+        max-width="900"
+        scrollable
+        transition="dialog-bottom-transition"
+        @update:model-value="clearOverlay"
+      >
+        <v-card>
+          <div class="d-flex align-center ga-3 px-5 py-3">
+            <v-avatar size="36" color="info" variant="tonal">
+              <v-icon size="20">mdi-cog-outline</v-icon>
+            </v-avatar>
+            <div class="flex-grow-1 overflow-hidden">
+              <div class="text-subtitle-1 font-weight-bold text-truncate">{{ $t('lock.settings') }}</div>
+              <div class="text-caption text-medium-emphasis text-truncate">
+                {{ activeLockName }} · <span class="font-mono">{{ overlayAddress }}</span>
+              </div>
+            </div>
+            <v-btn icon="mdi-close" variant="text" size="small" @click="clearOverlay" />
+          </div>
+          <v-divider />
+          <v-card-text class="pa-4">
+            <SettingsManager
+              v-if="overlay === 'settings' && overlayAddress"
+              :key="overlayAddress"
+              :address="overlayAddress"
+              @unpaired="clearOverlay"
+            />
+          </v-card-text>
+        </v-card>
+      </v-dialog>
+
       <Errors />
       <Notices />
     </v-main>
@@ -43,64 +109,44 @@
 <script>
 import AppTopBar from "@/components/AppTopBar.vue"
 import ConfigDlg from "@/components/ConfigDlg.vue"
+import LockLogsDialog from "@/components/LockLogsDialog.vue"
+import AddLockWizard from "@/components/AddLockWizard.vue"
+import CredentialsManager from "@/components/CredentialsManager.vue"
+import SettingsManager from "@/components/SettingsManager.vue"
 import Errors from "@/components/Errors.vue"
 import Notices from "@/components/Notices.vue"
 
 export default {
-  components: { AppTopBar, ConfigDlg, Errors, Notices },
-  data() {
-    return {
-      showConfigDialog: false,
-    }
+  components: {
+    AppTopBar, ConfigDlg, LockLogsDialog, AddLockWizard,
+    CredentialsManager, SettingsManager, Errors, Notices,
   },
   computed: {
-    showBreadcrumbs() {
-      return [
-        'Settings', 'SettingsAll',
-        'Credentials', 'CredentialsAll',
-        'Operations', 'OperationsAll',
-      ].includes(this.$route.name)
+    overlay() {
+      return this.$store.state.ui.overlay
+    },
+    overlayAddress() {
+      return this.$store.state.ui.address
     },
     activeLockName() {
-      const addr = this.$route.params.address
-      if (!addr) return null
-      const lock = this.$store.state.locks.find(l => l.address === addr)
-      return lock?.name || addr
+      const lock = this.$store.state.locks.find(l => l.address === this.overlayAddress)
+      return lock?.name || this.overlayAddress
     },
-    breadcrumbs() {
-      const name = this.$route.name
-      const extras = {
-        SettingsAll:    [{ title: this.$t('breadcrumb.settings'),    disabled: true }],
-        Settings:       [{ title: this.$t('breadcrumb.settings'),    to: '/settings',    disabled: false },
-                         { title: this.activeLockName,               disabled: true }],
-        OperationsAll:  [{ title: this.$t('breadcrumb.operations'),  disabled: true }],
-        Operations:     [{ title: this.$t('breadcrumb.operations'),  to: '/operations',  disabled: false },
-                         { title: this.activeLockName,               disabled: true }],
-        CredentialsAll: [{ title: this.$t('breadcrumb.credentials'), disabled: true }],
-        Credentials:    [{ title: this.$t('breadcrumb.credentials'), to: '/credentials', disabled: false },
-                         { title: this.activeLockName,               disabled: true }],
-      }
-      return [
-        { title: this.$t('breadcrumb.home'), to: '/', disabled: false },
-        ...(extras[name] ?? []),
-      ]
+    waitingCredentials() {
+      return this.$store.state.waitingCredentials
     },
   },
   methods: {
-    startScan() {
-      this.$store.dispatch("scan")
+    openWizard() {
+      this.$store.commit("setOverlay", { overlay: "addWizard" })
+    },
+    clearOverlay() {
+      this.$store.commit("clearOverlay")
     },
     refreshCredentials() {
-      const address = this.$store.state.activeLockAddress
-      if (address !== "") {
-        this.$store.dispatch("readCredentials", address)
+      if (this.overlayAddress) {
+        this.$store.dispatch("readCredentials", this.overlayAddress)
       }
-    },
-    editConfig() {
-      this.showConfigDialog = true
-    },
-    hideConfigDialog() {
-      this.showConfigDialog = false
     },
   },
 }
@@ -117,6 +163,18 @@ export default {
   .page-container {
     padding: 16px;
   }
+}
+
+.add-fab {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  z-index: 1006;
+}
+
+.font-mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.72rem;
 }
 
 /* Soft scrollbar tuned for both themes */

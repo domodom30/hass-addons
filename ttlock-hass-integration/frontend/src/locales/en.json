@@ -20,24 +20,30 @@
       "openWeb": "Open gateway web interface"
     }
   },
-  "nav": {
-    "dashboard": "Dashboard",
-    "locks": "Locks",
-    "credentials": "Credentials",
-    "operations": "Activity log",
-    "settings": "Settings",
-    "config": "Configuration"
-  },
   "theme": {
     "toggle": "Toggle theme",
     "light": "Light",
     "dark": "Dark"
   },
-  "breadcrumb": {
-    "home": "Dashboard",
-    "settings": "Settings",
-    "operations": "Activity log",
-    "credentials": "Credentials"
+  "logs": {
+    "title": "Activity log",
+    "allLocks": "All locks",
+    "loading": "Loading…",
+    "autoScroll": "Auto-scroll"
+  },
+  "wizard": {
+    "title": "Add a lock",
+    "step": "Step {current} of {total}",
+    "scanTitle": "Scan for locks",
+    "scanHint": "Make sure your TTLock device is awake and within Bluetooth range, then start the scan.",
+    "scanCta": "Scan",
+    "found": "{count} lock(s) found",
+    "selectTitle": "Select a lock to pair",
+    "selectHint": "Pick one of the discovered locks below and pair it.",
+    "noneFound": "No unpaired lock discovered yet. Go back and scan again.",
+    "unknownLock": "Unknown lock",
+    "doneTitle": "Lock paired",
+    "doneHint": "{name} has been paired and is now available on your dashboard."
   },
   "dashboard": {
     "title": "Dashboard",
@@ -204,6 +210,7 @@
     "close": "Close",
     "save": "Save",
     "back": "Back",
+    "continue": "Continue",
     "refresh": "Refresh",
     "invalidJson": "Invalid JSON"
   }

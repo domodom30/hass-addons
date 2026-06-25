@@ -162,34 +162,6 @@
           </template>
         </v-tooltip>
 
-        <!-- Modifier la configuration -->
-        <v-tooltip :text="$t('app.editConfig')" location="bottom">
-          <template #activator="{ props }">
-            <v-btn
-              v-bind="props"
-              icon="mdi-tune-variant"
-              variant="text"
-              size="small"
-              :disabled="isScanning"
-              @click="$emit('edit-config')"
-            />
-          </template>
-        </v-tooltip>
-
-        <!-- Rafraîchir les credentials (uniquement sur la route Credentials) -->
-        <v-tooltip v-if="isCredentialsRoute" :text="$t('app.refreshCredentials')" location="bottom">
-          <template #activator="{ props }">
-            <v-btn
-              v-bind="props"
-              :icon="isWaitingCredentials ? null : 'mdi-refresh'"
-              :loading="isWaitingCredentials"
-              variant="text"
-              size="small"
-              @click="$emit('refresh-credentials')"
-            />
-          </template>
-        </v-tooltip>
-
         <!-- Lancer un scan BLE -->
         <v-tooltip :text="$t('app.startScan')" location="bottom">
           <template #activator="{ props }">
@@ -200,10 +172,51 @@
               variant="tonal"
               color="primary"
               size="small"
-              @click="$emit('start-scan')"
+              @click="startScan"
             />
           </template>
         </v-tooltip>
+
+        <!-- Menu overflow (activité globale, configuration, alias) -->
+        <v-menu location="bottom end">
+          <template #activator="{ props }">
+            <v-btn v-bind="props" icon="mdi-dots-vertical" variant="text" size="small" />
+          </template>
+          <v-list density="compact" min-width="240">
+            <v-list-item @click="openGlobalActivity">
+              <template #prepend>
+                <v-icon color="success" size="18" class="mr-3">mdi-console-line</v-icon>
+              </template>
+              <v-list-item-title class="text-caption">{{ $t('operations.allTitle') }}</v-list-item-title>
+            </v-list-item>
+            <v-list-item :disabled="isScanning" @click="editConfig">
+              <template #prepend>
+                <v-icon color="primary" size="18" class="mr-3">mdi-tune-variant</v-icon>
+              </template>
+              <v-list-item-title class="text-caption">{{ $t('app.editConfig') }}</v-list-item-title>
+            </v-list-item>
+            <v-divider class="my-1" />
+            <v-list-item @click="exportAliases">
+              <template #prepend>
+                <v-icon color="primary" size="18" class="mr-3">mdi-download-outline</v-icon>
+              </template>
+              <v-list-item-title class="text-caption">{{ $t('aliases.export') }}</v-list-item-title>
+            </v-list-item>
+            <v-list-item @click="$refs.aliasInput.click()">
+              <template #prepend>
+                <v-icon color="secondary" size="18" class="mr-3">mdi-upload-outline</v-icon>
+              </template>
+              <v-list-item-title class="text-caption">{{ $t('aliases.import') }}</v-list-item-title>
+            </v-list-item>
+          </v-list>
+        </v-menu>
+        <input
+          ref="aliasInput"
+          type="file"
+          accept=".json,application/json"
+          style="display:none"
+          @change="importAliases"
+        />
       </div>
     </template>
 
@@ -216,7 +229,6 @@ import iconImg from '@/assets/icon.png'
 
 export default {
   name: 'AppTopBar',
-  emits: ['edit-config', 'start-scan', 'refresh-credentials'],
   setup() {
     const { isDark, toggleTheme } = useTheme()
     return { isDark, toggleTheme, iconImg }
@@ -294,17 +306,85 @@ export default {
       if (this.connectedLocks === 0) return 'error'
       return 'warning'
     },
-    isCredentialsRoute() {
-      return this.$route.name === 'Credentials'
-    },
-    isWaitingCredentials() {
-      return this.$store.state.waitingCredentials
-    },
     isRestartingGateway() {
       return this.$store.state.waitingGatewayRestart
     },
     isRebootingEsp32() {
       return this.$store.state.waitingEsp32Reboot
+    },
+  },
+  methods: {
+    startScan() {
+      this.$store.dispatch('scan')
+    },
+    editConfig() {
+      this.$store.commit('setOverlay', { overlay: 'config' })
+    },
+    openGlobalActivity() {
+      this.$store.commit('setOverlay', { overlay: 'logs', address: null })
+    },
+
+    /** Construit l'URL de base de l'API (fonctionne en HA ingress et en dev Vite). */
+    _apiBase() {
+      const loc = globalThis.location.href.replace(globalThis.location.hash, '')
+      if (loc.includes('/frontend/')) {
+        return loc.replace(/\/frontend\/.*$/, '/')
+      }
+      return '/'
+    },
+
+    exportAliases() {
+      const url = this._apiBase() + 'api/aliases'
+      const a = document.createElement('a')
+      a.href = url
+      a.download = 'aliasData.json'
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+    },
+
+    async importAliases(event) {
+      const file = event.target.files[0]
+      // Réinitialiser l'input pour permettre de re-sélectionner le même fichier
+      event.target.value = ''
+      if (!file) return
+
+      try {
+        const text = await file.text()
+        let data
+        try {
+          data = JSON.parse(text)
+        } catch {
+          this.$store.commit('setError', { message: this.$t('aliases.importErrorJson') })
+          return
+        }
+
+        if (
+          !data || typeof data !== 'object' || Array.isArray(data) ||
+          typeof data.lock !== 'object' || Array.isArray(data.lock) ||
+          typeof data.card !== 'object' || Array.isArray(data.card) ||
+          typeof data.finger !== 'object' || Array.isArray(data.finger)
+        ) {
+          this.$store.commit('setError', { message: this.$t('aliases.importErrorFormat') })
+          return
+        }
+
+        const url = this._apiBase() + 'api/aliases'
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data),
+        })
+
+        if (!response.ok) {
+          this.$store.commit('setError', { message: this.$t('aliases.importErrorServer') })
+          return
+        }
+
+        this.$store.commit('setNotice', { message: 'aliases.importSuccess' })
+      } catch {
+        this.$store.commit('setError', { message: this.$t('aliases.importErrorServer') })
+      }
     },
   },
 }

@@ -4,9 +4,9 @@
   "type": "module",
   "author": "Domodom30 <domodom30@gmail.com>",
   "scripts": {
-    "dev": "vite",
+    "dev": "vite --host",
     "build": "vite build",
-    "serve": "vite preview",
+    "serve": "vite preview --host",
     "lint": "eslint src --ext .vue,.js",
     "deploy": "npm run build && rm -rf ../addon/frontend/* && cp -r ./dist/* ../addon/frontend/"
   },

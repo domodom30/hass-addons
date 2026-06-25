@@ -93,31 +93,48 @@
         class="flex-grow-1"
       >{{ stateLabel }}</v-btn>
 
-      <v-menu v-if="!canPair">
-        <template #activator="{ props }">
-          <v-btn v-bind="props" icon="mdi-dots-horizontal" variant="text" size="small" />
-        </template>
-        <v-list density="comfortable">
-          <v-list-item @click="navigate('Credentials')">
-            <template #prepend>
-              <v-icon color="warning" size="18" class="mr-3">mdi-key-chain</v-icon>
-            </template>
-            <v-list-item-title class="text-caption">{{ $t('lock.credentials') }}</v-list-item-title>
-          </v-list-item>
-          <v-list-item @click="navigate('Settings')">
-            <template #prepend>
-              <v-icon color="info" size="18" class="mr-3">mdi-cog-outline</v-icon>
-            </template>
-            <v-list-item-title class="text-caption">{{ $t('lock.settings') }}</v-list-item-title>
-          </v-list-item>
-          <v-list-item :disabled="waiting" @click="navigate('Operations')">
-            <template #prepend>
-              <v-icon color="success" size="18" class="mr-3">mdi-history</v-icon>
-            </template>
-            <v-list-item-title class="text-caption">{{ $t('lock.operationLog') }}</v-list-item-title>
-          </v-list-item>
-        </v-list>
-      </v-menu>
+      <template v-if="!canPair">
+        <!-- Logs inline (façon ESPHome) -->
+        <v-tooltip :text="$t('lock.operationLog')" location="bottom">
+          <template #activator="{ props }">
+            <v-btn
+              v-bind="props"
+              icon="mdi-console-line"
+              variant="text"
+              size="small"
+              @click="openOverlay('logs')"
+            />
+          </template>
+        </v-tooltip>
+
+        <!-- Edit/Settings inline -->
+        <v-tooltip :text="$t('lock.settings')" location="bottom">
+          <template #activator="{ props }">
+            <v-btn
+              v-bind="props"
+              icon="mdi-cog-outline"
+              variant="text"
+              size="small"
+              @click="openOverlay('settings')"
+            />
+          </template>
+        </v-tooltip>
+
+        <!-- Overflow -->
+        <v-menu>
+          <template #activator="{ props }">
+            <v-btn v-bind="props" icon="mdi-dots-vertical" variant="text" size="small" />
+          </template>
+          <v-list density="comfortable">
+            <v-list-item @click="openOverlay('credentials')">
+              <template #prepend>
+                <v-icon color="warning" size="18" class="mr-3">mdi-key-chain</v-icon>
+              </template>
+              <v-list-item-title class="text-caption">{{ $t('lock.credentials') }}</v-list-item-title>
+            </v-list-item>
+          </v-list>
+        </v-menu>
+      </template>
     </div>
   </v-card>
 </template>
@@ -223,8 +240,8 @@ export default {
         console.error(error)
       }
     },
-    navigate(name) {
-      this.$router.push({ name, params: { address: this.lock.address } })
+    openOverlay(overlay) {
+      this.$store.commit("setOverlay", { overlay, address: this.lock.address })
     },
   },
   watch: {

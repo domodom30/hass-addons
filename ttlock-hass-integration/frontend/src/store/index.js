@@ -32,9 +32,16 @@ const store = createStore({
     waitingCalibrate: false,
     calibrateSuccess: null,
     waitingGatewayRestart: false,
-    waitingEsp32Reboot: false
+    waitingEsp32Reboot: false,
+    ui: { overlay: null, address: null }
   },
   mutations: {
+    setOverlay(state, { overlay, address = null }) {
+      state.ui = { overlay, address };
+    },
+    clearOverlay(state) {
+      state.ui = { overlay: null, address: null };
+    },
     setReady(state) {
       state.ready = true;
     },

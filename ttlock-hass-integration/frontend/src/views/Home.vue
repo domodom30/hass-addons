@@ -53,7 +53,7 @@
                 variant="text"
                 size="x-small"
                 color="primary"
-                :to="{ name: 'OperationsAll' }"
+                @click="openGlobalActivity"
               >{{ $t('dashboard.viewAll') }}</v-btn>
             </div>
           </div>
@@ -146,6 +146,9 @@ export default {
     },
     startScan() {
       this.$store.dispatch("scan")
+    },
+    openGlobalActivity() {
+      this.$store.commit("setOverlay", { overlay: "logs", address: null })
     },
     opIcon(op) {
       if (op.recordTypeCategory === 'LOCK') return 'mdi-lock'

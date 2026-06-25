@@ -20,24 +20,30 @@
       "openWeb": "Ouvrir la passerelle"
     }
   },
-  "nav": {
-    "dashboard": "Tableau de bord",
-    "locks": "Serrures",
-    "credentials": "Identifiants",
-    "operations": "Journal d'activité",
-    "settings": "Paramètres",
-    "config": "Configuration"
-  },
   "theme": {
     "toggle": "Changer de thème",
     "light": "Clair",
     "dark": "Sombre"
   },
-  "breadcrumb": {
-    "home": "Tableau de bord",
-    "settings": "Paramètres",
-    "operations": "Journal d'activité",
-    "credentials": "Identifiants"
+  "logs": {
+    "title": "Journal d'activité",
+    "allLocks": "Toutes les serrures",
+    "loading": "Chargement…",
+    "autoScroll": "Défilement auto"
+  },
+  "wizard": {
+    "title": "Ajouter une serrure",
+    "step": "Étape {current} sur {total}",
+    "scanTitle": "Rechercher des serrures",
+    "scanHint": "Assurez-vous que votre serrure TTLock est active et à portée Bluetooth, puis lancez le scan.",
+    "scanCta": "Scanner",
+    "found": "{count} serrure(s) trouvée(s)",
+    "selectTitle": "Sélectionner une serrure à appairer",
+    "selectHint": "Choisissez l'une des serrures découvertes ci-dessous et appairez-la.",
+    "noneFound": "Aucune serrure non appairée découverte pour l'instant. Revenez en arrière et relancez le scan.",
+    "unknownLock": "Serrure inconnue",
+    "doneTitle": "Serrure appairée",
+    "doneHint": "{name} a été appairée et est désormais disponible sur votre tableau de bord."
   },
   "dashboard": {
     "title": "Tableau de bord",
@@ -204,6 +210,7 @@
     "close": "Fermer",
     "save": "Enregistrer",
     "back": "Retour",
+    "continue": "Continuer",
     "refresh": "Rafraîchir",
     "invalidJson": "JSON invalide"
   }
