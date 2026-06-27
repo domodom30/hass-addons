@@ -1,5 +1,17 @@
 # Changelog
 
+## [2.5.7] - 2026-06-27
+
+### Frontend — UI overhaul
+
+- **AppTopBar — lock icon**: the image logo (`icon.png`) is replaced by the MDI icon `mdi-lock` (primary color); the asset import is removed
+- **AppTopBar — BLE scan button removed**: the scan button is removed from the navigation bar; adding a lock is now done exclusively through the floating action button
+- **Lock card — enriched contextual menu**: the *Operation log* and *Settings* inline buttons are moved into the `⋮` overflow menu alongside *Credentials* (visual divider between the two groups)
+- **"Add a lock" FAB** (`App.vue`): the circular `mdi-plus` button with `elevation="6"` is replaced by a flat text button (`variant flat`, `elevation 0`) — no shadow, no circular shape
+- **Home page — empty state**: the button now opens the `AddLockWizard` (icon `mdi-lock-plus-outline`) instead of triggering a direct BLE scan
+- **Activity log** (`LockLogsDialog.vue`): each terminal line now displays a colored MDI icon at the start; `FAILED` is handled as a distinct category (orange `#fb923c`, `mdi-alert-circle`) instead of being grouped with `OTHER` (blue, `mdi-information-outline`)
+- **Recent activity** (`Home.vue`): `opIcon`/`opColor` methods now cover all 5 categories — `LOCK`, `UNLOCK`, `ALARM`, `FAILED` (deep-orange, `mdi-alert-circle`), `OTHER` (info, `mdi-information-outline`)
+
 ## [2.5.3] - 2026-06-21
 
 ### New MQTT sensor: Last user
