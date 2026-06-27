@@ -1,123 +1,119 @@
-<script setup>
-import { onMounted } from "vue";
-import { useUiStore } from "@/stores/ui.js";
-import { useInfoStore } from "@/stores/info.js";
-import { useModalsStore } from "@/stores/modals.js";
-import { startWebSocket } from "@/composables/useWebSocket.js";
+<template>
+  <v-app>
+    <AppTopBar />
 
-import NavDropdown from "@/components/NavDropdown.vue";
-import ToastContainer from "@/components/ToastContainer.vue";
-import DevicesView from "@/views/DevicesView.vue";
-import EventsView from "@/views/EventsView.vue";
-import LogsView from "@/views/LogsView.vue";
-import AdaptersModal from "@/components/AdaptersModal.vue";
-import AdapterSwitchModal from "@/components/AdapterSwitchModal.vue";
-import AppSettingsModal from "@/components/AppSettingsModal.vue";
-import DeviceSettingsModal from "@/components/DeviceSettingsModal.vue";
-import ForgetDeviceModal from "@/components/ForgetDeviceModal.vue";
+    <v-main class="bg-background">
+      <div class="page-container">
+        <router-view />
+      </div>
+    </v-main>
 
-const ui = useUiStore();
-const info = useInfoStore();
-const modals = useModalsStore();
+    <DeviceSettingsDialog />
+    <AppSettingsDialog />
+    <AdaptersDialog />
+    <EventsDialog />
+    <LogsDialog />
 
-onMounted(() => {
-  info.load();
-  startWebSocket();
+    <ConfirmDlg ref="confirm" />
+    <Errors />
+    <Notices />
 
-  // Follow the OS theme while running (initial value is set in index.html).
-  window
-    .matchMedia("(prefers-color-scheme: dark)")
-    .addEventListener("change", (e) => {
-      document.documentElement.setAttribute(
-        "data-bs-theme",
-        e.matches ? "dark" : "light",
-      );
-    });
-});
+    <!-- Server reconnect indicator -->
+    <v-snackbar
+      :model-value="reconnecting"
+      :timeout="-1"
+      color="warning"
+      location="top"
+    >
+      <v-progress-circular indeterminate size="18" width="2" class="mr-2" />
+      {{ $t("reconnect.message") }}
+    </v-snackbar>
+
+    <!-- Long-running operation status (e.g. adapter switch / restart) -->
+    <v-snackbar
+      :model-value="!!status"
+      :timeout="-1"
+      color="info"
+      location="bottom"
+    >
+      <v-progress-circular indeterminate size="18" width="2" class="mr-2" />
+      {{ status }}
+    </v-snackbar>
+  </v-app>
+</template>
+
+<script>
+import AppTopBar from "@/components/AppTopBar.vue";
+import DeviceSettingsDialog from "@/components/DeviceSettingsDialog.vue";
+import AppSettingsDialog from "@/components/AppSettingsDialog.vue";
+import AdaptersDialog from "@/components/AdaptersDialog.vue";
+import EventsDialog from "@/components/EventsDialog.vue";
+import LogsDialog from "@/components/LogsDialog.vue";
+import ConfirmDlg from "@/components/ConfirmDlg.vue";
+import Errors from "@/components/Errors.vue";
+import Notices from "@/components/Notices.vue";
+
+export default {
+  name: "App",
+  components: {
+    AppTopBar,
+    DeviceSettingsDialog,
+    AppSettingsDialog,
+    AdaptersDialog,
+    EventsDialog,
+    LogsDialog,
+    ConfirmDlg,
+    Errors,
+    Notices,
+  },
+  // Expose a promise-based confirm() to any descendant (DeviceCard, dialogs).
+  provide() {
+    return {
+      confirm: (title, message, options) =>
+        this.$refs.confirm.open(title, message, options),
+    };
+  },
+  computed: {
+    reconnecting() {
+      return this.$store.state.reconnecting;
+    },
+    status() {
+      return this.$store.state.status;
+    },
+  },
+};
 </script>
 
-<template>
-  <ToastContainer />
+<style>
+.page-container {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 24px;
+}
 
-  <div class="app-header text-white py-4 mb-4">
-    <div class="container">
-      <div class="row align-items-center">
-        <div class="col">
-          <h1 class="mb-0">
-            <i class="fab fa-bluetooth-b me-2" />Bluetooth Audio Manager
-          </h1>
-          <p class="mb-0 opacity-75">
-            Manage Bluetooth audio device connections
-          </p>
-          <div class="build-info">
-            <span class="build-label">Build</span>
-            <span class="build-version">{{ info.version }}</span>
-          </div>
-        </div>
-        <div class="col-auto">
-          <NavDropdown
-            label="Views"
-            icon="fas fa-eye"
-          >
-            <li>
-              <a
-                class="dropdown-item"
-                href="#"
-                @click.prevent="ui.setView('events')"
-              >
-                <i class="fas fa-list me-2" />Events
-              </a>
-            </li>
-            <li>
-              <a
-                class="dropdown-item"
-                href="#"
-                @click.prevent="ui.setView('logs')"
-              >
-                <i class="fas fa-scroll me-2" />Logs
-              </a>
-            </li>
-          </NavDropdown>
+@media (max-width: 600px) {
+  .page-container {
+    padding: 16px;
+  }
+}
 
-          <NavDropdown
-            label="Settings"
-            icon="fas fa-cog"
-          >
-            <li>
-              <a
-                class="dropdown-item"
-                href="#"
-                @click.prevent="modals.openAppSettings()"
-              >
-                <i class="fas fa-sliders me-2" />App Settings
-              </a>
-            </li>
-            <li>
-              <a
-                class="dropdown-item"
-                href="#"
-                @click.prevent="modals.openAdapters()"
-              >
-                <i class="fas fa-microchip me-2" />Bluetooth Adapters
-              </a>
-            </li>
-          </NavDropdown>
-        </div>
-      </div>
-    </div>
-  </div>
+.font-mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.75rem;
+}
 
-  <DevicesView v-show="ui.activeView === 'devices'" />
-  <EventsView v-show="ui.activeView === 'events'" />
-  <LogsView v-show="ui.activeView === 'logs'" />
-
-  <footer class="app-footer text-center py-2 text-muted">
-    <span>{{ info.version }}<template v-if="info.adapter"> ({{ info.adapter }})</template></span>
-  </footer>
-
-  <AdaptersModal />
-  <AdapterSwitchModal />
-  <AppSettingsModal />
-  <DeviceSettingsModal />
-  <ForgetDeviceModal />
-</template>
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(128, 128, 128, 0.25);
+  border-radius: 8px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(128, 128, 128, 0.45);
+}
+</style>
