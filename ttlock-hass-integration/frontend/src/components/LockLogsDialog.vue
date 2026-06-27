@@ -127,6 +127,12 @@ export default {
       })
     },
     lines() {
+      const KIND_MAP = {
+        UNLOCK: "unlock",
+        LOCK:   "lock",
+        ALARM:  "alarm",
+        FAILED: "failed",
+      }
       const ICONS = {
         unlock: { icon: 'mdi-lock-open-variant',   color: '#22c55e' },
         lock:   { icon: 'mdi-lock',                color: '#f87171' },
@@ -137,11 +143,7 @@ export default {
       return this.rawOperations
         .filter(op => this.filter === "ALL" || op.recordTypeCategory === this.filter)
         .map(op => {
-          const kind = op.recordTypeCategory === "UNLOCK" ? "unlock"
-            : op.recordTypeCategory === "LOCK"   ? "lock"
-            : op.recordTypeCategory === "ALARM"  ? "alarm"
-            : op.recordTypeCategory === "FAILED" ? "failed"
-            : "other"
+          const kind = KIND_MAP[op.recordTypeCategory] ?? "other"
           const m = moment(op.operateDate, "YYYYMMDDHHmmss")
           let credential = ""
           if (op.passwordName) credential = op.passwordName
