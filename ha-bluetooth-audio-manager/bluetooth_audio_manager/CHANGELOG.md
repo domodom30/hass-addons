@@ -5,7 +5,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
-## [2.6.0] — 2026-06-27
+## [2.7.0] — 2026-06-27
 
 ### ✨ Added
 
@@ -16,6 +16,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   connected device drive the PulseAudio sink and propagate to the speaker's
   AVRCP absolute volume. Live changes are throttled while dragging and stay
   in sync with the speaker's physical buttons.
+
+### 🎨 Changed
+
+- **Compact switches**: switches are no longer inset and use a compact
+  density with ✓ / ✗ thumb icons.
 
 ---
 

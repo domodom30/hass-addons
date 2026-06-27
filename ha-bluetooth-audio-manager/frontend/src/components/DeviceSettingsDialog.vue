@@ -6,10 +6,19 @@
           <v-icon size="20">mdi-cog-outline</v-icon>
         </v-avatar>
         <div class="overflow-hidden flex-grow-1">
-          <div class="text-subtitle-1 font-weight-bold text-truncate">{{ device.name }}</div>
-          <div class="text-caption text-medium-emphasis font-mono">{{ device.address }}</div>
+          <div class="text-subtitle-1 font-weight-bold text-truncate">
+            {{ device.name }}
+          </div>
+          <div class="text-caption text-medium-emphasis font-mono">
+            {{ device.address }}
+          </div>
         </div>
-        <v-btn icon="mdi-close" variant="text" size="small" @click="show = false" />
+        <v-btn
+          icon="mdi-close"
+          variant="text"
+          size="small"
+          @click="show = false"
+        />
       </div>
       <v-divider />
 
@@ -21,7 +30,11 @@
           item-title="label"
           item-value="value"
           :label="$t('deviceSettings.audioProfile')"
-          :hint="form.audioProfile === 'hfp' ? $t('deviceSettings.hfpHelp') : $t('deviceSettings.a2dpHelp')"
+          :hint="
+            form.audioProfile === 'hfp'
+              ? $t('deviceSettings.hfpHelp')
+              : $t('deviceSettings.a2dpHelp')
+          "
           persistent-hint
           class="mb-4"
         />
@@ -71,8 +84,6 @@
           v-model="form.mpdEnabled"
           :label="$t('deviceSettings.mpd')"
           :messages="$t('deviceSettings.mpdHelp')"
-          color="primary"
-          class="mb-2"
         />
         <template v-if="form.mpdEnabled">
           <v-text-field
@@ -95,10 +106,17 @@
             persistent-hint
             class="mb-3"
           />
-          <v-alert v-if="form.mpdPort" type="info" variant="tonal" density="compact">
+          <v-alert
+            v-if="form.mpdPort"
+            type="info"
+            variant="tonal"
+            density="compact"
+          >
             {{ $t("deviceSettings.usePort", { port: form.mpdPort }) }}<br />
-            {{ $t("deviceSettings.host") }}: <code>{{ mpdHostname }}</code><br />
-            {{ $t("deviceSettings.password") }}: <code>{{ mpdPasswordDisplay }}</code>
+            {{ $t("deviceSettings.host") }}: <code>{{ mpdHostname }}</code
+            ><br />
+            {{ $t("deviceSettings.password") }}:
+            <code>{{ mpdPasswordDisplay }}</code>
           </v-alert>
         </template>
 
@@ -108,16 +126,27 @@
           v-model="form.avrcpEnabled"
           :disabled="!hasAvrcpCap"
           :label="$t('deviceSettings.mediaButtons')"
-          :messages="hasAvrcpCap ? $t('deviceSettings.avrcpHelp') : $t('deviceSettings.avrcpUnsupported')"
-          color="primary"
+          :messages="
+            hasAvrcpCap
+              ? $t('deviceSettings.avrcpHelp')
+              : $t('deviceSettings.avrcpUnsupported')
+          "
         />
       </v-card-text>
 
       <v-divider />
       <v-card-actions class="px-4 py-3">
-        <v-btn variant="text" @click="show = false">{{ $t("common.cancel") }}</v-btn>
+        <v-btn variant="text" @click="show = false">{{
+          $t("common.cancel")
+        }}</v-btn>
         <v-spacer />
-        <v-btn color="primary" variant="flat" :loading="saving" prepend-icon="mdi-content-save" @click="save">
+        <v-btn
+          color="primary"
+          variant="flat"
+          :loading="saving"
+          prepend-icon="mdi-content-save"
+          @click="save"
+        >
           {{ $t("common.save") }}
         </v-btn>
       </v-card-actions>
@@ -166,13 +195,20 @@ export default {
       return this.$store.state.info.mpdHostname;
     },
     mpdPasswordDisplay() {
-      return this.$store.state.info.mpdPasswordSet ? "**********" : this.$t("deviceSettings.none");
+      return this.$store.state.info.mpdPasswordSet
+        ? "**********"
+        : this.$t("deviceSettings.none");
     },
     hasHfp() {
-      return this.lowerUuids.includes(HFP_UUID) || this.lowerUuids.includes(HSP_UUID);
+      return (
+        this.lowerUuids.includes(HFP_UUID) || this.lowerUuids.includes(HSP_UUID)
+      );
     },
     hasAvrcpCap() {
-      return this.lowerUuids.includes(AVRCP_TARGET) || this.lowerUuids.includes(AVRCP_CONTROLLER);
+      return (
+        this.lowerUuids.includes(AVRCP_TARGET) ||
+        this.lowerUuids.includes(AVRCP_CONTROLLER)
+      );
     },
     idleHelp() {
       return {
@@ -185,7 +221,11 @@ export default {
     profileItems() {
       return [
         { value: "a2dp", label: this.$t("deviceSettings.a2dp") },
-        { value: "hfp", label: this.$t("deviceSettings.hfp"), props: { disabled: !this.hasHfp } },
+        {
+          value: "hfp",
+          label: this.$t("deviceSettings.hfp"),
+          props: { disabled: !this.hasHfp },
+        },
       ];
     },
     idleItems() {
@@ -193,7 +233,10 @@ export default {
         { value: "default", label: this.$t("deviceSettings.idleDefault") },
         { value: "power_save", label: this.$t("deviceSettings.idlePowerSave") },
         { value: "keep_alive", label: this.$t("deviceSettings.idleKeepAlive") },
-        { value: "auto_disconnect", label: this.$t("deviceSettings.idleAutoDisconnect") },
+        {
+          value: "auto_disconnect",
+          label: this.$t("deviceSettings.idleAutoDisconnect"),
+        },
       ];
     },
     delayItems() {
@@ -257,12 +300,14 @@ export default {
         idle_mode: this.form.idleMode,
         keep_alive_method: this.form.kaMethod,
         power_save_delay: parseInt(this.form.powerSaveDelay, 10) || 0,
-        auto_disconnect_minutes: parseInt(this.form.autoDisconnectMinutes, 10) || 30,
+        auto_disconnect_minutes:
+          parseInt(this.form.autoDisconnectMinutes, 10) || 30,
         mpd_enabled: this.form.mpdEnabled,
       };
       if (settings.mpd_enabled) {
         settings.mpd_hw_volume = parseInt(this.form.mpdHwVolume, 10) || 100;
-        if (this.form.mpdPort) settings.mpd_port = parseInt(this.form.mpdPort, 10);
+        if (this.form.mpdPort)
+          settings.mpd_port = parseInt(this.form.mpdPort, 10);
       }
       if (this.hfpSwitching) settings.audio_profile = this.form.audioProfile;
       if (this.hasAvrcpCap) settings.avrcp_enabled = this.form.avrcpEnabled;
@@ -273,7 +318,9 @@ export default {
         });
         this.show = false;
       } catch (e) {
-        this.$store.commit("setError", { message: `Failed to save settings: ${e.message}` });
+        this.$store.commit("setError", {
+          message: `Failed to save settings: ${e.message}`,
+        });
       } finally {
         this.saving = false;
       }

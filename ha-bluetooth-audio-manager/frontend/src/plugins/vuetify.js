@@ -99,7 +99,12 @@ export default createVuetify({
     VBtn: { rounded: "lg", class: "text-none font-weight-medium", variant: "flat" },
     VTextField: { variant: "outlined", density: "comfortable", color: "primary" },
     VSelect: { variant: "outlined", density: "comfortable", color: "primary" },
-    VSwitch: { color: "primary", inset: true },
+    VSwitch: {
+      color: "primary",
+      density: "compact",
+      trueIcon: "mdi-check",
+      falseIcon: "mdi-close",
+    },
     VChip: { rounded: "lg" },
     VAppBar: { density: "compact", elevation: 0, flat: true },
     VDialog: { scrollable: true },

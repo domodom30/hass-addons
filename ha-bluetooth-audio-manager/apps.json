@@ -21,7 +21,7 @@
       "category": ["utilities", "music"],
       "platform": "Docker",
       "price": "Free",
-      "github": "https://github.com/domodom30/ha-bluetooth-audio-manager",
+      "github": "https://github.com/domodom30/hass-addons/tree/master/ha-bluetooth-audio-manager",
       "language": "Python",
       "requirements": "Home Assistant OS or Supervised installation with Bluetooth adapter",
       "features": [
