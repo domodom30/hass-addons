@@ -63,6 +63,14 @@ const store = createStore({
     connectedCount: (state) => state.devices.filter((d) => d.connected).length,
     managedCount: (state) =>
       state.devices.filter((d) => d.stored || d.paired).length,
+    // Devices shown on the dashboard grid (paired/stored/connected only).
+    managedDevices: (state) =>
+      state.devices.filter((d) => d.paired || d.stored || d.connected),
+    // Freshly discovered, not-yet-managed devices (shown in the add wizard).
+    discoveredDevices: (state) =>
+      state.devices.filter(
+        (d) => !d.paired && !d.stored && !d.connected && !d._stale,
+      ),
     hasStoredOrPaired: (state) =>
       state.devices.some((d) => d.stored || d.paired),
     sinkForAddress: (state) => (address) => {

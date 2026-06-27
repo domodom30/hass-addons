@@ -4,7 +4,23 @@
     "ok": "OK",
     "close": "Fermer",
     "save": "Enregistrer",
-    "saving": "Enregistrement…"
+    "saving": "Enregistrement…",
+    "back": "Retour",
+    "continue": "Continuer"
+  },
+  "wizard": {
+    "title": "Ajouter un périphérique",
+    "step": "Étape {current} sur {total}",
+    "scanTitle": "Rechercher des périphériques",
+    "scanHint": "Mettez votre enceinte Bluetooth en mode appairage, puis lancez la recherche pour découvrir les périphériques audio à proximité.",
+    "scanCta": "Rechercher",
+    "found": "{count} trouvé(s)",
+    "selectTitle": "Sélectionner un périphérique",
+    "selectHint": "Choisissez un périphérique découvert et appairez-le.",
+    "noneFound": "Aucun périphérique trouvé pour l'instant. Revenez en arrière et relancez la recherche.",
+    "unknownDevice": "Périphérique inconnu",
+    "doneTitle": "Périphérique appairé",
+    "doneHint": "{name} est appairé. Vous pouvez maintenant le connecter depuis le tableau de bord."
   },
   "app": {
     "title": "Bluetooth Audio",

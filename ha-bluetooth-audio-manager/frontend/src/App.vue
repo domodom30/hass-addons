@@ -6,8 +6,20 @@
       <div class="page-container">
         <router-view />
       </div>
+
+      <!-- Floating "add device" button → opens the scan/pair wizard -->
+      <v-btn
+        class="add-fab"
+        color="primary"
+        prepend-icon="mdi-plus"
+        elevation="0"
+        @click="$store.commit('setOverlay', { overlay: 'addWizard' })"
+      >
+        {{ $t("dashboard.addDevice") }}
+      </v-btn>
     </v-main>
 
+    <AddDeviceWizard />
     <DeviceSettingsDialog />
     <AppSettingsDialog />
     <AdaptersDialog />
@@ -44,6 +56,7 @@
 
 <script>
 import AppTopBar from "@/components/AppTopBar.vue";
+import AddDeviceWizard from "@/components/AddDeviceWizard.vue";
 import DeviceSettingsDialog from "@/components/DeviceSettingsDialog.vue";
 import AppSettingsDialog from "@/components/AppSettingsDialog.vue";
 import AdaptersDialog from "@/components/AdaptersDialog.vue";
@@ -57,6 +70,7 @@ export default {
   name: "App",
   components: {
     AppTopBar,
+    AddDeviceWizard,
     DeviceSettingsDialog,
     AppSettingsDialog,
     AdaptersDialog,
@@ -89,6 +103,13 @@ export default {
   max-width: 1280px;
   margin: 0 auto;
   padding: 24px;
+}
+
+.add-fab {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  z-index: 1006;
 }
 
 @media (max-width: 600px) {
