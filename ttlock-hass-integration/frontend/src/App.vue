@@ -7,20 +7,14 @@
         <router-view />
       </div>
 
-      <!-- FAB d'ajout (assistant d'appairage) -->
-      <v-tooltip :text="$t('wizard.title')" location="start">
-        <template #activator="{ props }">
-          <v-btn
-            v-bind="props"
-            class="add-fab"
-            color="primary"
-            icon="mdi-plus"
-            size="large"
-            elevation="6"
-            @click="openWizard"
-          />
-        </template>
-      </v-tooltip>
+      <!-- Bouton d'ajout (assistant d'appairage) -->
+      <v-btn
+        class="add-fab"
+        color="primary"
+        prepend-icon="mdi-plus"
+        elevation="0"
+        @click="openWizard"
+      >{{ $t('wizard.title') }}</v-btn>
 
       <!-- Overlays (modèle page unique façon ESPHome) -->
       <ConfigDlg :show="overlay === 'config'" @cancel="clearOverlay" />

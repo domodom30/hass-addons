@@ -54,6 +54,7 @@
           class="term-line"
           :class="`term-${op.kind}`"
         >
+          <v-icon :icon="op.icon" size="14" class="term-icon" :style="{ color: op.iconColor }" />
           <span class="term-time">{{ op.time }}</span>
           <span class="term-tag" :class="`tag-${op.kind}`">{{ op.tag }}</span>
           <span v-if="op.lockName" class="term-lock">{{ op.lockName }}</span>
@@ -69,10 +70,10 @@
         <v-switch
           v-model="autoScroll"
           :label="$t('logs.autoScroll')"
-          density="compact"
+          true-icon="mdi-check"
+          false-icon="mdi-close"
           hide-details
-          color="success"
-          class="text-caption"
+          color="info"
         />
       </div>
     </v-card>
@@ -126,19 +127,30 @@ export default {
       })
     },
     lines() {
+      const ICONS = {
+        unlock: { icon: 'mdi-lock-open-variant',   color: '#22c55e' },
+        lock:   { icon: 'mdi-lock',                color: '#f87171' },
+        alarm:  { icon: 'mdi-bell-alert',          color: '#fbbf24' },
+        failed: { icon: 'mdi-alert-circle',        color: '#fb923c' },
+        other:  { icon: 'mdi-information-outline', color: '#60a5fa' },
+      }
       return this.rawOperations
         .filter(op => this.filter === "ALL" || op.recordTypeCategory === this.filter)
         .map(op => {
           const kind = op.recordTypeCategory === "UNLOCK" ? "unlock"
-            : op.recordTypeCategory === "LOCK" ? "lock"
-              : op.recordTypeCategory === "ALARM" ? "alarm" : "info"
+            : op.recordTypeCategory === "LOCK"   ? "lock"
+            : op.recordTypeCategory === "ALARM"  ? "alarm"
+            : op.recordTypeCategory === "FAILED" ? "failed"
+            : "other"
           const m = moment(op.operateDate, "YYYYMMDDHHmmss")
           let credential = ""
           if (op.passwordName) credential = op.passwordName
           if (op.password) credential += ` (${op.password})`
           return {
             kind,
-            tag: (op.recordTypeCategory || "INFO").padEnd(6, " "),
+            icon: ICONS[kind].icon,
+            iconColor: ICONS[kind].color,
+            tag: (op.recordTypeCategory || "OTHER").padEnd(6, " "),
             time: m.isValid() ? m.format("DD-MM HH:mm:ss") : "—",
             lockName: op._lockName,
             message: op.recordTypeName || "—",
@@ -223,9 +235,11 @@ export default {
   white-space: pre;
 }
 .tag-unlock { color: #22c55e; }
-.tag-lock { color: #f87171; }
-.tag-alarm { color: #fbbf24; }
-.tag-info { color: #60a5fa; }
+.tag-lock   { color: #f87171; }
+.tag-alarm  { color: #fbbf24; }
+.tag-failed { color: #fb923c; }
+.tag-other  { color: #60a5fa; }
+.term-icon  { margin-right: 6px; vertical-align: middle; }
 .term-lock {
   color: #c792ea;
   margin-right: 10px;

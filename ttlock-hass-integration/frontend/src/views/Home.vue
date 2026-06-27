@@ -15,11 +15,10 @@
       <v-btn
         color="primary"
         variant="flat"
-        prepend-icon="mdi-bluetooth-connect"
-        :loading="isScanning"
-        @click="startScan"
+        prepend-icon="mdi-lock-plus-outline"
+        @click="openWizard"
       >
-        {{ $t('dashboard.empty.cta') }}
+        {{ $t('wizard.title') }}
       </v-btn>
     </v-card>
 
@@ -144,6 +143,9 @@ export default {
         }
       }
     },
+    openWizard() {
+      this.$store.commit('setOverlay', { overlay: 'addWizard' })
+    },
     startScan() {
       this.$store.dispatch("scan")
     },
@@ -151,16 +153,18 @@ export default {
       this.$store.commit("setOverlay", { overlay: "logs", address: null })
     },
     opIcon(op) {
-      if (op.recordTypeCategory === 'LOCK') return 'mdi-lock'
+      if (op.recordTypeCategory === 'LOCK')   return 'mdi-lock'
       if (op.recordTypeCategory === 'UNLOCK') return 'mdi-lock-open-variant'
-      if (op.recordTypeCategory === 'ALARM') return 'mdi-shield-lock-open'
-      return 'mdi-history'
+      if (op.recordTypeCategory === 'ALARM')  return 'mdi-bell-alert'
+      if (op.recordTypeCategory === 'FAILED') return 'mdi-alert-circle'
+      return 'mdi-information-outline'
     },
     opColor(op) {
-      if (op.recordTypeCategory === 'LOCK') return 'error'
+      if (op.recordTypeCategory === 'LOCK')   return 'error'
       if (op.recordTypeCategory === 'UNLOCK') return 'success'
-      if (op.recordTypeCategory === 'ALARM') return 'warning'
-      return 'secondary'
+      if (op.recordTypeCategory === 'ALARM')  return 'warning'
+      if (op.recordTypeCategory === 'FAILED') return 'deep-orange'
+      return 'info'
     },
     opDateTime(op) {
       const m = moment(op.operateDate, "YYYYMMDDHHmmss")

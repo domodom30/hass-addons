@@ -11,9 +11,7 @@
       <!-- Logo avec tooltip version -->
       <v-tooltip :text="`TTLock v${version}`" location="bottom">
         <template #activator="{ props }">
-          <v-avatar v-bind="props" size="32" style="flex-shrink: 0;">
-            <v-img :src="iconImg" width="32" height="32" />
-          </v-avatar>
+          <v-icon v-bind="props" size="26" color="primary">mdi-lock</v-icon>
         </template>
       </v-tooltip>
 
@@ -162,21 +160,6 @@
           </template>
         </v-tooltip>
 
-        <!-- Lancer un scan BLE -->
-        <v-tooltip :text="$t('app.startScan')" location="bottom">
-          <template #activator="{ props }">
-            <v-btn
-              v-bind="props"
-              :icon="isScanning ? null : 'mdi-bluetooth-connect'"
-              :loading="isScanning"
-              variant="tonal"
-              color="primary"
-              size="small"
-              @click="startScan"
-            />
-          </template>
-        </v-tooltip>
-
         <!-- Menu overflow (activité globale, configuration, alias) -->
         <v-menu location="bottom end">
           <template #activator="{ props }">
@@ -211,10 +194,12 @@
           </v-list>
         </v-menu>
         <input
+          id="aliasFileInput"
           ref="aliasInput"
           type="file"
           accept=".json,application/json"
-          style="display:none"
+          hidden
+          aria-label="Importer un fichier d'alias"
           @change="importAliases"
         />
       </div>
@@ -225,13 +210,12 @@
 
 <script>
 import { useTheme } from '@/composables/useTheme'
-import iconImg from '@/assets/icon.png'
 
 export default {
   name: 'AppTopBar',
   setup() {
     const { isDark, toggleTheme } = useTheme()
-    return { isDark, toggleTheme, iconImg }
+    return { isDark, toggleTheme }
   },
   computed: {
     version() {
@@ -314,9 +298,6 @@ export default {
     },
   },
   methods: {
-    startScan() {
-      this.$store.dispatch('scan')
-    },
     editConfig() {
       this.$store.commit('setOverlay', { overlay: 'config' })
     },
@@ -336,11 +317,13 @@ export default {
     exportAliases() {
       const url = this._apiBase() + 'api/aliases'
       const a = document.createElement('a')
+
       a.href = url
       a.download = 'aliasData.json'
+
       document.body.appendChild(a)
       a.click()
-      document.body.removeChild(a)
+      a.remove()
     },
 
     async importAliases(event) {

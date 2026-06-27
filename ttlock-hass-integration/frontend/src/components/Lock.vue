@@ -94,38 +94,25 @@
       >{{ stateLabel }}</v-btn>
 
       <template v-if="!canPair">
-        <!-- Logs inline (façon ESPHome) -->
-        <v-tooltip :text="$t('lock.operationLog')" location="bottom">
-          <template #activator="{ props }">
-            <v-btn
-              v-bind="props"
-              icon="mdi-console-line"
-              variant="text"
-              size="small"
-              @click="openOverlay('logs')"
-            />
-          </template>
-        </v-tooltip>
-
-        <!-- Edit/Settings inline -->
-        <v-tooltip :text="$t('lock.settings')" location="bottom">
-          <template #activator="{ props }">
-            <v-btn
-              v-bind="props"
-              icon="mdi-cog-outline"
-              variant="text"
-              size="small"
-              @click="openOverlay('settings')"
-            />
-          </template>
-        </v-tooltip>
-
-        <!-- Overflow -->
+        <!-- Menu contextuel -->
         <v-menu>
           <template #activator="{ props }">
             <v-btn v-bind="props" icon="mdi-dots-vertical" variant="text" size="small" />
           </template>
           <v-list density="comfortable">
+            <v-list-item @click="openOverlay('logs')">
+              <template #prepend>
+                <v-icon color="success" size="18" class="mr-3">mdi-console-line</v-icon>
+              </template>
+              <v-list-item-title class="text-caption">{{ $t('lock.operationLog') }}</v-list-item-title>
+            </v-list-item>
+            <v-list-item @click="openOverlay('settings')">
+              <template #prepend>
+                <v-icon color="primary" size="18" class="mr-3">mdi-cog-outline</v-icon>
+              </template>
+              <v-list-item-title class="text-caption">{{ $t('lock.settings') }}</v-list-item-title>
+            </v-list-item>
+            <v-divider class="my-1" />
             <v-list-item @click="openOverlay('credentials')">
               <template #prepend>
                 <v-icon color="warning" size="18" class="mr-3">mdi-key-chain</v-icon>
