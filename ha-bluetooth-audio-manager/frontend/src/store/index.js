@@ -116,6 +116,15 @@ const store = createStore({
     setSinks(state, sinks) {
       state.sinks = sinks || [];
     },
+    // Optimistic patch of a device's sink (volume/mute) for instant UI feedback;
+    // the authoritative state arrives right after via the sinks_changed event.
+    patchSink(state, { address, patch }) {
+      const mac = address.replace(/:/g, "_").toLowerCase();
+      const sink = state.sinks.find(
+        (s) => s.name && s.name.toLowerCase().includes(mac),
+      );
+      if (sink) Object.assign(sink, patch);
+    },
     setScan(state, { scanning, duration }) {
       state.scanning = scanning;
       state.scanEndsAt = scanning && duration ? Date.now() + duration * 1000 : 0;
@@ -289,6 +298,22 @@ const store = createStore({
         await api.forget(address);
       } catch (e) {
         commit("setError", { message: `Forget failed: ${e.message}` });
+      }
+    },
+    async setVolume({ commit }, { address, volume }) {
+      commit("patchSink", { address, patch: { volume } });
+      try {
+        await api.setVolume(address, volume);
+      } catch (e) {
+        commit("setError", { message: `Volume change failed: ${e.message}` });
+      }
+    },
+    async setMute({ commit }, { address, mute }) {
+      commit("patchSink", { address, patch: { mute } });
+      try {
+        await api.setMute(address, mute);
+      } catch (e) {
+        commit("setError", { message: `Mute change failed: ${e.message}` });
       }
     },
     async setAdapter({ commit }, { mac, label, clean }) {

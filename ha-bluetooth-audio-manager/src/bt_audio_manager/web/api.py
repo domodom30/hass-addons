@@ -271,6 +271,56 @@ def create_api_routes(
             logger.error("Disconnect failed for %s: %s", address, e)
             return web.json_response({"error": _friendly_error(e)}, status=500)
 
+    @routes.post("/api/set-volume")
+    async def set_volume(request: web.Request) -> web.Response:
+        """Set the audio volume (0-100) of a connected device's sink."""
+        address = None
+        try:
+            body = await request.json()
+            address, err = _get_validated_address(body)
+            if err:
+                return err
+            volume = body.get("volume")
+            if not isinstance(volume, int) or volume < 0 or volume > 100:
+                return web.json_response(
+                    {"error": "volume must be an integer 0-100"}, status=400
+                )
+            ok = await manager.set_device_volume(address, volume)
+            if not ok:
+                return web.json_response(
+                    {"error": "Device sink not found or volume change failed"},
+                    status=404,
+                )
+            return web.json_response({"address": address, "volume": volume})
+        except Exception as e:
+            logger.error("Set volume failed for %s: %s", address, e)
+            return web.json_response({"error": _friendly_error(e)}, status=500)
+
+    @routes.post("/api/set-mute")
+    async def set_mute(request: web.Request) -> web.Response:
+        """Mute or unmute a connected device's sink."""
+        address = None
+        try:
+            body = await request.json()
+            address, err = _get_validated_address(body)
+            if err:
+                return err
+            mute = body.get("mute")
+            if not isinstance(mute, bool):
+                return web.json_response(
+                    {"error": "mute must be a boolean"}, status=400
+                )
+            ok = await manager.set_device_mute(address, mute)
+            if not ok:
+                return web.json_response(
+                    {"error": "Device sink not found or mute change failed"},
+                    status=404,
+                )
+            return web.json_response({"address": address, "mute": mute})
+        except Exception as e:
+            logger.error("Set mute failed for %s: %s", address, e)
+            return web.json_response({"error": _friendly_error(e)}, status=500)
+
     @routes.post("/api/force-reconnect")
     async def force_reconnect(request: web.Request) -> web.Response:
         """Force disconnect + reconnect cycle for zombie connections."""
