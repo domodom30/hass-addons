@@ -59,8 +59,14 @@ async def main() -> None:
     try:
         # Start web server first so ingress doesn't show 502 during init
         await web_server.start()
-        await manager.start()
-        logger.info("All services running. Waiting for shutdown signal...")
+        try:
+            await manager.start()
+            logger.info("All services running. Waiting for shutdown signal...")
+        except Exception as e:
+            logger.error(
+                "Manager failed to start (web UI remains available in degraded mode): %s",
+                e, exc_info=True,
+            )
         await shutdown_event.wait()
     except Exception as e:
         logger.error("Fatal error: %s", e, exc_info=True)

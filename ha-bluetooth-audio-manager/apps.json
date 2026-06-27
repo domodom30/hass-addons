@@ -1,10 +1,10 @@
 {
   "$schema": "https://wvw.dev/apps.schema.json",
   "store": {
-    "name": "scyto",
-    "developer": "scyto",
+    "name": "domodom30",
+    "developer": "domodom30",
     "tagline": "Home Assistant add-ons for smart home audio",
-    "github": "https://github.com/scyto"
+    "github": "https://github.com/domodom30"
   },
   "categories": [
     { "id": "utilities", "name": "Utilities" },
@@ -17,11 +17,11 @@
       "subtitle": "A2DP Bluetooth audio for Home Assistant",
       "description": "Home Assistant add-on for managing Bluetooth audio device connections (A2DP) with persistent pairing, auto-reconnect, and AppArmor security.",
       "longDescription": "Bluetooth Audio Manager is a Home Assistant add-on that turns your HA instance into a Bluetooth audio hub. It supports A2DP streaming with persistent device pairing, automatic reconnection, RSSI-based device monitoring, and full AppArmor security. Manage everything through an integrated ingress UI with real-time WebSocket updates. Includes optional per-device MPD instances for TTS and media playback automations.",
-      "icon": "https://raw.githubusercontent.com/scyto/ha-bluetooth-audio-manager/main/bluetooth_audio_manager/icon.png",
+      "icon": "https://raw.githubusercontent.com/domodom30/ha-bluetooth-audio-manager/main/bluetooth_audio_manager/icon.png",
       "category": ["utilities", "music"],
       "platform": "Docker",
       "price": "Free",
-      "github": "https://github.com/scyto/ha-bluetooth-audio-manager",
+      "github": "https://github.com/domodom30/ha-bluetooth-audio-manager",
       "language": "Python",
       "requirements": "Home Assistant OS or Supervised installation with Bluetooth adapter",
       "features": [
