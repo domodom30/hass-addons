@@ -1,0 +1,70 @@
+name: Bluetooth Audio Manager
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - "ha-bluetooth-audio-manager/**"
+      - ".github/workflows/build-bt-audio.yaml"
+      - ".github/workflows/_build-addon.yaml"
+  pull_request:
+    branches: [master]
+    paths:
+      - "ha-bluetooth-audio-manager/**"
+      - ".github/workflows/build-bt-audio.yaml"
+      - ".github/workflows/_build-addon.yaml"
+  workflow_dispatch:
+
+# Needed so the reusable build workflow can push images to GHCR — a reusable
+# workflow can only reduce, never raise, the caller's token permissions.
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  frontend-checks:
+    name: Frontend lint & test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: ha-bluetooth-audio-manager/frontend/package-lock.json
+      - name: Install
+        working-directory: ha-bluetooth-audio-manager/frontend
+        run: npm ci
+      - name: Lint
+        working-directory: ha-bluetooth-audio-manager/frontend
+        run: npm run lint
+      - name: Test
+        working-directory: ha-bluetooth-audio-manager/frontend
+        run: npm run test
+
+  version:
+    name: Extract version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: v
+        run: |
+          VERSION=$(grep '^version:' ha-bluetooth-audio-manager/bluetooth_audio_manager/config.yaml \
+            | sed 's/version: *"\?\([^"]*\)"\?/\1/')
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+
+  build:
+    name: Build & publish
+    needs: [frontend-checks, version]
+    uses: ./.github/workflows/_build-addon.yaml
+    with:
+      image-name: ha-bluetooth-audio-manager
+      architectures: '["amd64", "aarch64"]'
+      context: ha-bluetooth-audio-manager
+      dockerfile: ha-bluetooth-audio-manager/docker/Dockerfile
+      base-version: "3.20"
+      version: ${{ needs.version.outputs.version }}
+      push: ${{ github.event_name != 'pull_request' }}
+    secrets: inherit

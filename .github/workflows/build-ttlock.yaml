@@ -1,0 +1,49 @@
+name: TTLock
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - "ttlock-hass-integration/**"
+      - ".github/workflows/build-ttlock.yaml"
+      - ".github/workflows/_build-addon.yaml"
+  pull_request:
+    branches: [master]
+    paths:
+      - "ttlock-hass-integration/**"
+      - ".github/workflows/build-ttlock.yaml"
+      - ".github/workflows/_build-addon.yaml"
+  workflow_dispatch:
+
+# Needed so the reusable build workflow can push images to GHCR — a reusable
+# workflow can only reduce, never raise, the caller's token permissions.
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  version:
+    name: Extract version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: v
+        run: |
+          VERSION=$(python3 -c "import json; print(json.load(open('ttlock-hass-integration/config.json'))['version'])")
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+
+  build:
+    name: Build & publish
+    needs: version
+    uses: ./.github/workflows/_build-addon.yaml
+    with:
+      image-name: ttlock-hass-integration
+      architectures: '["amd64", "aarch64"]'
+      context: ttlock-hass-integration
+      dockerfile: ttlock-hass-integration/Dockerfile
+      base-version: "3.19"
+      version: ${{ needs.version.outputs.version }}
+      push: ${{ github.event_name != 'pull_request' }}
+    secrets: inherit

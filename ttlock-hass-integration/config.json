@@ -2,6 +2,7 @@
   "name": "TTLock",
   "version": "2.5.7",
   "slug": "ttlock-hass-integration",
+  "image": "ghcr.io/domodom30/{arch}-ttlock-hass-integration",
   "description": "Integration of the offline TTLock SDK into Home Assistant",
   "url": "https://github.com/domodom30/hass-addons",
   "panel_icon": "mdi:key-wireless",
@@ -36,5 +37,5 @@
     "gateway_debug": "bool?",
     "oplog_cooldown": "int?"
   },
-  "arch": ["amd64", "armv7", "armhf", "i386", "aarch64"]
+  "arch": ["amd64", "aarch64"]
 }

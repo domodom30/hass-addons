@@ -1,0 +1,109 @@
+# Reusable workflow that builds and publishes one Home Assistant add-on image
+# (multi-arch: amd64 + aarch64) using the official composable builder actions.
+# Native runners only (no QEMU), so only amd64/aarch64 are supported.
+name: Build add-on (reusable)
+
+on:
+  workflow_call:
+    inputs:
+      image-name:
+        description: Image name without registry/arch prefix (e.g. ttlock-hass-integration)
+        required: true
+        type: string
+      architectures:
+        description: JSON array of architectures (only amd64/aarch64 supported)
+        required: false
+        type: string
+        default: '["amd64", "aarch64"]'
+      context:
+        description: Docker build context path (relative to repo root)
+        required: true
+        type: string
+      dockerfile:
+        description: Dockerfile path (relative to repo root)
+        required: true
+        type: string
+      base-version:
+        description: HA base image tag (e.g. "3.20") used for BUILD_FROM
+        required: true
+        type: string
+      version:
+        description: Image version/tag (read from the add-on config)
+        required: true
+        type: string
+      push:
+        description: Whether to push images + manifest to GHCR
+        required: false
+        type: boolean
+        default: false
+      extra-build-args:
+        description: Additional build args, one per line
+        required: false
+        type: string
+        default: ""
+
+jobs:
+  init:
+    name: Prepare matrix
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.matrix.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build matrix
+        id: matrix
+        uses: home-assistant/builder/actions/prepare-multi-arch-matrix@2026.06.0
+        with:
+          architectures: ${{ inputs.architectures }}
+          image-name: ${{ inputs.image-name }}
+
+  build:
+    name: Build ${{ matrix.arch }}
+    needs: init
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.init.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build image
+        uses: home-assistant/builder/actions/build-image@2026.06.0
+        with:
+          arch: ${{ matrix.arch }}
+          image: ${{ matrix.image }}
+          image-tags: |
+            ${{ inputs.version }}
+            latest
+          version: ${{ inputs.version }}
+          push: ${{ inputs.push }}
+          cosign: "false"
+          context: ${{ inputs.context }}
+          file: ${{ inputs.dockerfile }}
+          container-registry-password: ${{ secrets.GITHUB_TOKEN }}
+          build-args: |
+            BUILD_FROM=ghcr.io/home-assistant/${{ matrix.arch }}-base:${{ inputs.base-version }}
+            BUILD_ARCH=${{ matrix.arch }}
+            BUILD_VERSION=${{ inputs.version }}
+            ${{ inputs.extra-build-args }}
+
+  manifest:
+    name: Publish multi-arch manifest
+    needs: [init, build]
+    if: ${{ inputs.push }}
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+    steps:
+      - name: Publish manifest
+        uses: home-assistant/builder/actions/publish-multi-arch-manifest@2026.06.0
+        with:
+          architectures: ${{ inputs.architectures }}
+          image-name: ${{ inputs.image-name }}
+          image-tags: |
+            ${{ inputs.version }}
+            latest
+          cosign: "false"
+          container-registry-password: ${{ secrets.GITHUB_TOKEN }}
