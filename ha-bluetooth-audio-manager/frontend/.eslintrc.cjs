@@ -1,4 +1,4 @@
-/* eslint config for the Vue frontend */
+/* eslint config for the Vue 3 + Vuetify frontend */
 module.exports = {
   root: true,
   env: {
@@ -6,10 +6,7 @@ module.exports = {
     es2022: true,
     node: true,
   },
-  extends: [
-    "eslint:recommended",
-    "plugin:vue/vue3-recommended",
-  ],
+  extends: ["eslint:recommended", "plugin:vue/vue3-essential"],
   parserOptions: {
     ecmaVersion: 2022,
     sourceType: "module",

@@ -1,0 +1,142 @@
+{
+  "common": {
+    "cancel": "Cancel",
+    "ok": "OK",
+    "close": "Close",
+    "save": "Save",
+    "saving": "Saving…"
+  },
+  "app": {
+    "title": "Bluetooth Audio",
+    "subtitle": "Manage Bluetooth audio device connections"
+  },
+  "theme": { "toggle": "Toggle theme" },
+  "language": { "label": "Language" },
+  "menu": {
+    "events": "Events",
+    "logs": "Logs",
+    "appSettings": "App Settings",
+    "adapters": "Bluetooth Adapters",
+    "restart": "Restart Add-on"
+  },
+  "dashboard": {
+    "devices": "Devices",
+    "total": "Devices",
+    "connected": "Connected",
+    "addDevice": "Add Device",
+    "scanning": "Scanning… {n}s",
+    "finishing": "Finishing…",
+    "emptyHint": "Click \"Add Device\" to discover nearby Bluetooth audio devices."
+  },
+  "device": {
+    "connected": "Connected",
+    "paired": "Paired",
+    "discovered": "Discovered",
+    "connect": "Connect",
+    "disconnect": "Disconnect",
+    "pair": "Pair",
+    "dismiss": "Dismiss",
+    "settings": "Settings",
+    "forceReconnect": "Force Reconnect",
+    "forget": "Forget Device",
+    "on": "on",
+    "detectedByClass": "Detected by device class — pair to confirm audio support",
+    "pairedNoProfiles": "Paired but no audio profiles found",
+    "powerSave": "Power Save",
+    "stayAwake": "Stay Awake",
+    "autoDisconnect": "Auto-Disconnect"
+  },
+  "sink": {
+    "streaming": "Streaming",
+    "idle": "Idle",
+    "suspended": "Suspended",
+    "muted": "Muted"
+  },
+  "events": {
+    "title": "Events",
+    "clear": "Clear",
+    "empty": "No events yet. Connect a device and press buttons on it."
+  },
+  "logs": {
+    "title": "Logs",
+    "allLevels": "All Levels",
+    "debug": "Debug",
+    "info": "Info",
+    "warning": "Warning",
+    "error": "Error",
+    "search": "Search logs...",
+    "autoScroll": "Auto-scroll",
+    "live": "Live",
+    "empty": "No matching log entries."
+  },
+  "settings": {
+    "title": "App Settings",
+    "scanDuration": "Scan Duration (seconds)",
+    "scanDurationHint": "How long to scan for discoverable Bluetooth audio devices (5–60).",
+    "autoReconnect": "Auto Reconnect",
+    "autoReconnectHint": "Automatically reconnect to paired devices when they become available.",
+    "reconnectInterval": "Reconnect Interval (seconds)",
+    "reconnectIntervalHint": "Initial delay between reconnection attempts (5–600).",
+    "maxBackoff": "Max Reconnect Backoff (seconds)",
+    "maxBackoffHint": "Maximum delay between reconnection attempts with exponential backoff (60–3600)."
+  },
+  "deviceSettings": {
+    "title": "Device Settings",
+    "audioProfile": "Audio Profile",
+    "a2dp": "A2DP (stereo music)",
+    "hfp": "HFP (mono + microphone)",
+    "a2dpHelp": "Stereo high-quality audio for music and media playback.",
+    "hfpHelp": "Mono audio with microphone input. Use with Wyoming Satellite for voice assistant.",
+    "whenIdle": "When Idle",
+    "idleDefault": "Default (do nothing)",
+    "idlePowerSave": "Power Save (let speaker sleep)",
+    "idleKeepAlive": "Stay Awake",
+    "idleAutoDisconnect": "Auto-Disconnect",
+    "idleHelpDefault": "No action taken when audio stops. Whether the speaker sleeps depends on its own hardware idle timer.",
+    "idleHelpPowerSave": "Suspends the audio sink after the delay to release the A2DP transport. The speaker's own internal sleep timer determines when it actually powers down.",
+    "idleHelpKeepAlive": "Streams inaudible audio to prevent the speaker from auto-shutting down during silence.",
+    "idleHelpAutoDisconnect": "Fully disconnects the Bluetooth device after the specified idle timeout.",
+    "delayBeforeSuspend": "Delay before suspending",
+    "immediately": "Immediately",
+    "method": "Method",
+    "infrasound": "Infrasound (2 Hz tone — recommended)",
+    "silence": "Silence (PCM zeros)",
+    "disconnectAfter": "Disconnect after",
+    "mpd": "MPD Media Player",
+    "mpdHelp": "Route MPD audio output to this speaker. Add the HA MPD integration to create a media_player entity for TTS and media playback.",
+    "hwVolume": "Hardware Volume (%)",
+    "hwVolumeHelp": "Sets speaker hardware volume when MPD starts (1–100%). MPD then controls perceived loudness as a single volume knob. Default: 100%.",
+    "mpdPort": "MPD Port",
+    "mpdPortHelp": "Port for this speaker's MPD instance (6600–6609). Auto-assigned on first enable.",
+    "usePort": "Use port {port} when adding the HA MPD integration.",
+    "host": "Host",
+    "password": "Password",
+    "none": "None",
+    "mediaButtons": "Media Buttons (AVRCP)",
+    "avrcpHelp": "Track playback state and accept media-button commands from the speaker. Media buttons may or may not work reliably depending on hardware.",
+    "avrcpUnsupported": "Device does not support AVRCP media buttons."
+  },
+  "adapters": {
+    "title": "Bluetooth Adapters",
+    "recommendation": "Recommendation:",
+    "recommendationBody": "Use a dedicated Bluetooth adapter that is not configured in Home Assistant and is not used for BLE scanning. Leave the adapter unconfigured in HA — this app will manage it directly.",
+    "onlyOne": "Only one adapter can be active at a time. Select which Bluetooth adapter to use. Changing the adapter requires an app restart. All existing devices will be unpaired and need to be re-paired with the new adapter.",
+    "powered": "Powered",
+    "off": "Off",
+    "inUse": "In Use",
+    "haBluetooth": "HA Bluetooth",
+    "bleScanning": "HA BLE Scanning",
+    "select": "Select",
+    "none": "No Bluetooth adapters found.",
+    "loading": "Loading adapters...",
+    "switchTitle": "Switch Bluetooth Adapter",
+    "switchBody": "You are about to switch to adapter {name}. Bluetooth pairings are tied to a specific adapter, so all current device pairings will be removed and devices will need to be re-paired on the new adapter.",
+    "switchConfirm": "Switch & Clear Pairings"
+  },
+  "forget": {
+    "title": "Forget Device",
+    "message": "Forget device {address}? This will unpair it.",
+    "confirm": "Forget"
+  },
+  "reconnect": { "message": "Reconnecting to server…" }
+}

@@ -1,4 +1,4 @@
-// Bluetooth profile UUIDs and human labels. Ports app.js §6.
+// Bluetooth profile UUIDs and helpers (shared by the store and components).
 
 export const A2DP_SINK = "0000110b-0000-1000-8000-00805f9b34fb";
 export const A2DP_SOURCE = "0000110a-0000-1000-8000-00805f9b34fb";
@@ -19,12 +19,13 @@ export const BT_PROFILES = {
 export function profileLabels(uuids) {
   if (!uuids || uuids.length === 0) return "";
   const labels = uuids.map((u) => BT_PROFILES[u.toLowerCase()]).filter(Boolean);
-  return labels.length > 0 ? "Supports: " + labels.join(" · ") : "";
+  return labels.length > 0 ? labels.join(" · ") : "";
 }
 
 export function hasAvrcp(uuids) {
   return (uuids || []).some(
-    (u) => u.toLowerCase().startsWith("0000110c") ||
+    (u) =>
+      u.toLowerCase().startsWith("0000110c") ||
       u.toLowerCase().startsWith("0000110e"),
   );
 }
@@ -32,4 +33,8 @@ export function hasAvrcp(uuids) {
 export function hasHfpHsp(uuids) {
   const lower = (uuids || []).map((u) => u.toLowerCase());
   return lower.includes(HFP_UUID) || lower.includes(HSP_UUID);
+}
+
+export function hasA2dpSink(uuids) {
+  return (uuids || []).some((u) => u.toLowerCase().startsWith("0000110b"));
 }

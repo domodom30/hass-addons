@@ -1,0 +1,142 @@
+{
+  "common": {
+    "cancel": "Annuler",
+    "ok": "OK",
+    "close": "Fermer",
+    "save": "Enregistrer",
+    "saving": "Enregistrement…"
+  },
+  "app": {
+    "title": "Bluetooth Audio",
+    "subtitle": "Gérer les connexions des périphériques audio Bluetooth"
+  },
+  "theme": { "toggle": "Changer de thème" },
+  "language": { "label": "Langue" },
+  "menu": {
+    "events": "Événements",
+    "logs": "Journaux",
+    "appSettings": "Réglages de l'application",
+    "adapters": "Adaptateurs Bluetooth",
+    "restart": "Redémarrer l'add-on"
+  },
+  "dashboard": {
+    "devices": "Périphériques",
+    "total": "Périphériques",
+    "connected": "Connectés",
+    "addDevice": "Ajouter un périphérique",
+    "scanning": "Recherche… {n}s",
+    "finishing": "Finalisation…",
+    "emptyHint": "Cliquez sur « Ajouter un périphérique » pour découvrir les périphériques audio Bluetooth à proximité."
+  },
+  "device": {
+    "connected": "Connecté",
+    "paired": "Appairé",
+    "discovered": "Découvert",
+    "connect": "Connecter",
+    "disconnect": "Déconnecter",
+    "pair": "Appairer",
+    "dismiss": "Ignorer",
+    "settings": "Réglages",
+    "forceReconnect": "Forcer la reconnexion",
+    "forget": "Oublier le périphérique",
+    "on": "sur",
+    "detectedByClass": "Détecté par classe de périphérique — appairez pour confirmer la prise en charge audio",
+    "pairedNoProfiles": "Appairé mais aucun profil audio trouvé",
+    "powerSave": "Économie d'énergie",
+    "stayAwake": "Maintenir éveillé",
+    "autoDisconnect": "Déconnexion auto"
+  },
+  "sink": {
+    "streaming": "Lecture",
+    "idle": "Inactif",
+    "suspended": "Suspendu",
+    "muted": "Muet"
+  },
+  "events": {
+    "title": "Événements",
+    "clear": "Effacer",
+    "empty": "Aucun événement pour l'instant. Connectez un périphérique et appuyez sur ses boutons."
+  },
+  "logs": {
+    "title": "Journaux",
+    "allLevels": "Tous les niveaux",
+    "debug": "Débogage",
+    "info": "Info",
+    "warning": "Avertissement",
+    "error": "Erreur",
+    "search": "Rechercher dans les journaux...",
+    "autoScroll": "Défilement auto",
+    "live": "Direct",
+    "empty": "Aucune entrée de journal correspondante."
+  },
+  "settings": {
+    "title": "Réglages de l'application",
+    "scanDuration": "Durée de recherche (secondes)",
+    "scanDurationHint": "Durée de recherche des périphériques audio Bluetooth détectables (5–60).",
+    "autoReconnect": "Reconnexion automatique",
+    "autoReconnectHint": "Se reconnecter automatiquement aux périphériques appairés lorsqu'ils sont disponibles.",
+    "reconnectInterval": "Intervalle de reconnexion (secondes)",
+    "reconnectIntervalHint": "Délai initial entre les tentatives de reconnexion (5–600).",
+    "maxBackoff": "Délai de reconnexion maximal (secondes)",
+    "maxBackoffHint": "Délai maximal entre les tentatives de reconnexion avec backoff exponentiel (60–3600)."
+  },
+  "deviceSettings": {
+    "title": "Réglages du périphérique",
+    "audioProfile": "Profil audio",
+    "a2dp": "A2DP (musique stéréo)",
+    "hfp": "HFP (mono + microphone)",
+    "a2dpHelp": "Audio stéréo haute qualité pour la musique et le multimédia.",
+    "hfpHelp": "Audio mono avec entrée microphone. À utiliser avec Wyoming Satellite pour l'assistant vocal.",
+    "whenIdle": "En cas d'inactivité",
+    "idleDefault": "Par défaut (ne rien faire)",
+    "idlePowerSave": "Économie d'énergie (laisser l'enceinte dormir)",
+    "idleKeepAlive": "Maintenir éveillé",
+    "idleAutoDisconnect": "Déconnexion automatique",
+    "idleHelpDefault": "Aucune action lorsque l'audio s'arrête. La mise en veille dépend du minuteur matériel de l'enceinte.",
+    "idleHelpPowerSave": "Suspend la sortie audio après le délai pour libérer le transport A2DP. Le minuteur interne de l'enceinte détermine sa mise hors tension réelle.",
+    "idleHelpKeepAlive": "Diffuse un son inaudible pour empêcher l'enceinte de s'éteindre pendant le silence.",
+    "idleHelpAutoDisconnect": "Déconnecte complètement le périphérique Bluetooth après le délai d'inactivité indiqué.",
+    "delayBeforeSuspend": "Délai avant suspension",
+    "immediately": "Immédiatement",
+    "method": "Méthode",
+    "infrasound": "Infrason (ton 2 Hz — recommandé)",
+    "silence": "Silence (zéros PCM)",
+    "disconnectAfter": "Déconnecter après",
+    "mpd": "Lecteur multimédia MPD",
+    "mpdHelp": "Router la sortie audio MPD vers cette enceinte. Ajoutez l'intégration MPD de HA pour créer une entité media_player pour le TTS et la lecture multimédia.",
+    "hwVolume": "Volume matériel (%)",
+    "hwVolumeHelp": "Définit le volume matériel de l'enceinte au démarrage de MPD (1–100 %). MPD contrôle ensuite le volume perçu. Par défaut : 100 %.",
+    "mpdPort": "Port MPD",
+    "mpdPortHelp": "Port de l'instance MPD de cette enceinte (6600–6609). Attribué automatiquement à la première activation.",
+    "usePort": "Utilisez le port {port} lors de l'ajout de l'intégration MPD de HA.",
+    "host": "Hôte",
+    "password": "Mot de passe",
+    "none": "Aucun",
+    "mediaButtons": "Boutons multimédias (AVRCP)",
+    "avrcpHelp": "Suivre l'état de lecture et accepter les commandes des boutons multimédias de l'enceinte. Leur fiabilité dépend du matériel.",
+    "avrcpUnsupported": "Le périphérique ne prend pas en charge les boutons multimédias AVRCP."
+  },
+  "adapters": {
+    "title": "Adaptateurs Bluetooth",
+    "recommendation": "Recommandation :",
+    "recommendationBody": "Utilisez un adaptateur Bluetooth dédié, non configuré dans Home Assistant et non utilisé pour le scan BLE. Laissez l'adaptateur non configuré dans HA — cette application le gérera directement.",
+    "onlyOne": "Un seul adaptateur peut être actif à la fois. Sélectionnez l'adaptateur Bluetooth à utiliser. Le changement d'adaptateur nécessite un redémarrage. Tous les périphériques existants seront désappairés et devront être réappairés avec le nouvel adaptateur.",
+    "powered": "Allumé",
+    "off": "Éteint",
+    "inUse": "Utilisé",
+    "haBluetooth": "Bluetooth HA",
+    "bleScanning": "Scan BLE HA",
+    "select": "Sélectionner",
+    "none": "Aucun adaptateur Bluetooth trouvé.",
+    "loading": "Chargement des adaptateurs...",
+    "switchTitle": "Changer d'adaptateur Bluetooth",
+    "switchBody": "Vous êtes sur le point de basculer vers l'adaptateur {name}. Les appairages Bluetooth sont liés à un adaptateur précis : tous les appairages actuels seront supprimés et les périphériques devront être réappairés sur le nouvel adaptateur.",
+    "switchConfirm": "Changer et effacer les appairages"
+  },
+  "forget": {
+    "title": "Oublier le périphérique",
+    "message": "Oublier le périphérique {address} ? Cela le désappairera.",
+    "confirm": "Oublier"
+  },
+  "reconnect": { "message": "Reconnexion au serveur…" }
+}

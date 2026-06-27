@@ -1,3 +1,6 @@
+# ARG global — must be before first FROM to be usable in FROM instructions
+ARG BUILD_FROM=ghcr.io/home-assistant/amd64-base:3.20
+
 # ---------------------------------------------------------------------------
 # Frontend build stage — Vue 3 + Vite.
 # Pinned to --platform=$BUILDPLATFORM so it always runs natively on the build
@@ -11,7 +14,6 @@ RUN npm ci
 COPY frontend/ ./
 RUN npm run build
 
-ARG BUILD_FROM=ghcr.io/home-assistant/amd64-base:3.20
 FROM ${BUILD_FROM}
 
 # Pull bluez and mpd from Alpine edge (newer than base 3.20)

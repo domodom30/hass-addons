@@ -1,16 +1,11 @@
 <!DOCTYPE html>
-<html lang="en" data-bs-theme="light">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Bluetooth Audio Manager</title>
-  <script>
-    // Set the initial theme before paint to avoid a flash of the wrong theme.
-    const theme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-    document.documentElement.setAttribute('data-bs-theme', theme);
-  </script>
 </head>
-<body class="bg-body">
+<body>
   <div id="app"></div>
   <script type="module" src="/src/main.js"></script>
 </body>
