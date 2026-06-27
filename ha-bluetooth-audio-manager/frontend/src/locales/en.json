@@ -4,7 +4,23 @@
     "ok": "OK",
     "close": "Close",
     "save": "Save",
-    "saving": "Saving…"
+    "saving": "Saving…",
+    "back": "Back",
+    "continue": "Continue"
+  },
+  "wizard": {
+    "title": "Add a device",
+    "step": "Step {current} of {total}",
+    "scanTitle": "Scan for devices",
+    "scanHint": "Put your Bluetooth speaker in pairing mode, then scan to discover nearby audio devices.",
+    "scanCta": "Scan",
+    "found": "{count} found",
+    "selectTitle": "Select a device",
+    "selectHint": "Pick a discovered device and pair it.",
+    "noneFound": "No devices found yet. Go back and scan again.",
+    "unknownDevice": "Unknown device",
+    "doneTitle": "Device paired",
+    "doneHint": "{name} is paired. You can now connect it from the dashboard."
   },
   "app": {
     "title": "Bluetooth Audio",
@@ -40,6 +56,9 @@
     "forceReconnect": "Force Reconnect",
     "forget": "Forget Device",
     "on": "on",
+    "volume": "Volume",
+    "mute": "Mute",
+    "unmute": "Unmute",
     "detectedByClass": "Detected by device class — pair to confirm audio support",
     "pairedNoProfiles": "Paired but no audio profiles found",
     "powerSave": "Power Save",

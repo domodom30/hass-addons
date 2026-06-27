@@ -139,6 +139,12 @@ class Api {
   forget(address) {
     return this._post("/api/forget", { address });
   }
+  setVolume(address, volume) {
+    return this._post("/api/set-volume", { address, volume });
+  }
+  setMute(address, mute) {
+    return this._post("/api/set-mute", { address, mute });
+  }
   setAdapter(adapter, clean) {
     return this._post("/api/set-adapter", { adapter, clean });
   }

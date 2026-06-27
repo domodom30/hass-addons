@@ -567,3 +567,29 @@ class PulseAudioManager:
         except (FileNotFoundError, OSError) as exc:
             logger.warning("pactl not available: %s", exc)
             return False
+
+    async def set_sink_mute(self, sink_name: str, mute: bool) -> bool:
+        """Mute or unmute a PulseAudio sink.
+
+        Uses ``pactl set-sink-mute``; like volume, this propagates to the
+        Bluetooth speaker. Returns True if the command succeeded.
+        """
+        mute_arg = "1" if mute else "0"
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                "pactl", "set-sink-mute", sink_name, mute_arg,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            _, stderr = await proc.communicate()
+            if proc.returncode == 0:
+                logger.info("PA sink mute set: %s → %s", sink_name, mute_arg)
+                return True
+            logger.warning(
+                "pactl set-sink-mute %s %s failed: %s",
+                sink_name, mute_arg, stderr.decode(errors="replace").strip(),
+            )
+            return False
+        except (FileNotFoundError, OSError) as exc:
+            logger.warning("pactl not available: %s", exc)
+            return False

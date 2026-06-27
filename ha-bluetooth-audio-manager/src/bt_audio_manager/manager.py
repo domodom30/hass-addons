@@ -1353,6 +1353,36 @@ class BluetoothAudioManager:
             return []
         return await self.pulse.list_bt_sinks()
 
+    async def set_device_volume(self, address: str, volume: int) -> bool:
+        """Set the PulseAudio sink volume (0-100%) for a connected device.
+
+        Propagates to the speaker's AVRCP absolute volume. Broadcasts the
+        new sink state so all UIs update immediately.
+        """
+        if not self.pulse:
+            return False
+        sink_name = await self.pulse.get_sink_for_address(address)
+        if not sink_name:
+            logger.warning("set_device_volume: no sink for %s", address)
+            return False
+        ok = await self.pulse.set_sink_volume(sink_name, volume)
+        if ok:
+            await self._broadcast_sinks()
+        return ok
+
+    async def set_device_mute(self, address: str, mute: bool) -> bool:
+        """Mute/unmute the PulseAudio sink for a connected device."""
+        if not self.pulse:
+            return False
+        sink_name = await self.pulse.get_sink_for_address(address)
+        if not sink_name:
+            logger.warning("set_device_mute: no sink for %s", address)
+            return False
+        ok = await self.pulse.set_sink_mute(sink_name, mute)
+        if ok:
+            await self._broadcast_sinks()
+        return ok
+
     async def list_adapters(self) -> list[dict]:
         """List all Bluetooth adapters on the system.
 
