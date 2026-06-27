@@ -5,6 +5,20 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [2.6.0] — 2026-06-27
+
+### ✨ Added
+
+- **Add-device wizard**: a floating action button opens a 3-step assistant
+  (scan → pick a discovered device → paired). The dashboard grid now shows
+  only managed devices; discovery happens in the wizard.
+- **Volume control on device cards**: a slider and mute button on each
+  connected device drive the PulseAudio sink and propagate to the speaker's
+  AVRCP absolute volume. Live changes are throttled while dragging and stay
+  in sync with the speaker's physical buttons.
+
+---
+
 ## [2.5.0] — 2026-06-27
 
 ### ✨ Changed
