@@ -14,19 +14,40 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   switch (off ⇒ nothing reconnects); the reconnect interval and backoff remain
   global. Disabling the toggle cancels any in-flight reconnection; enabling it
   on a disconnected device starts reconnecting immediately. Existing devices
-  keep reconnecting (enabled by default).
+  keep reconnecting (enabled by default). A status chip on each device card
+  shows whether auto-reconnect is on.
+- **Battery level**: device cards now show the speaker's battery percentage
+  when the device reports it (BlueZ Battery1).
+- **Active codec**: connected devices display the negotiated A2DP codec
+  (SBC / AAC / …) alongside the audio format.
+- **Rename a device**: rename a speaker straight from its card menu; the new
+  name is stored and applied to the BlueZ alias.
+- **Real health check**: `/api/health` now verifies D-Bus and adapter power
+  state (used by the add-on watchdog).
 
 ### 🎨 Changed
 
 - **Cancel / Close buttons** are now solid red buttons (matching the type of
   the primary *Save* buttons) across the settings, device, adapters and
   add-device dialogs.
-- **Typography**: bundled the self-hosted Roboto font and enabled font
-  smoothing for a sharper, consistent rendering.
+- **Typography**: bundled the self-hosted **Inter** font (sharper at small
+  sizes) with font smoothing, and reduced the font size of switches,
+  dropdowns and buttons for a denser, cleaner layout.
 - **Logs viewer**: aligned columns into a clean table — the logger column has a
   fixed width with ellipsis and the timestamp column no longer wastes space.
 - **Overflow menu**: each entry now has a distinct icon color for easier
   scanning.
+- **Confirmations & feedback**: disconnect and pair now ask for confirmation,
+  and the app-settings *Save* button shows a loading state.
+- **Internationalization**: translated previously hardcoded labels (device
+  capabilities, signal quality, event types) — full English/French coverage.
+
+### 🐛 Fixed
+
+- Background audio-profile switches now log their errors instead of failing
+  silently.
+- Per-device D-Bus subscriptions are released on shutdown (no more leaked
+  callbacks).
 
 ---
 

@@ -237,6 +237,15 @@ class BluezDevice:
         )
         logger.info("Device %s trusted=%s", self._address, trusted)
 
+    async def set_alias(self, alias: str) -> None:
+        """Set the device's BlueZ Alias (persists the name at the OS level)."""
+        from dbus_next import Variant
+
+        await self._properties_iface.call_set(
+            DEVICE_INTERFACE, "Alias", Variant("s", alias)
+        )
+        logger.info("Device %s alias set to %s", self._address, alias)
+
     async def connect(self) -> None:
         """Connect to the device (all profiles including A2DP)."""
         logger.info("Connecting to %s...", self._address)

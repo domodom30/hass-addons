@@ -13,14 +13,17 @@ from .constants import (
     ADAPTER_INTERFACE,
     AVRCP_CONTROLLER_UUID,
     AVRCP_TARGET_UUID,
+    BATTERY_INTERFACE,
     BLUEZ_SERVICE,
     COD_MAJOR_AUDIO,
     DEFAULT_ADAPTER_PATH,
     DEVICE_INTERFACE,
     LE_AUDIO_UUIDS,
+    MEDIA_TRANSPORT_INTERFACE,
     OBJECT_MANAGER_INTERFACE,
     PROPERTIES_INTERFACE,
     SINK_UUIDS,
+    a2dp_codec_name,
     cod_major_class,
     cod_major_label,
     is_cod_audio_sink,
@@ -311,12 +314,26 @@ class BluezAdapter:
                     else:
                         bearers.append(short)
 
-            # Check for MediaTransport1 at sub-paths (e.g. .../fd0)
+            # Battery level (org.bluez.Battery1, same object path) — absent
+            # on most A2DP speakers, so None is the expected default.
+            battery = None
+            battery_props = interfaces.get(BATTERY_INTERFACE)
+            if battery_props:
+                pct = battery_props.get("Percentage")
+                if pct is not None:
+                    battery = int(pct.value)
+
+            # Check for MediaTransport1 at sub-paths (e.g. .../fd0) and read
+            # the active A2DP codec from the same transport object.
             has_transport = False
+            codec = None
             dev_fragment = path + "/"
             for obj_path in objects:
-                if obj_path.startswith(dev_fragment) and "org.bluez.MediaTransport1" in objects[obj_path]:
+                tp = objects[obj_path].get(MEDIA_TRANSPORT_INTERFACE)
+                if obj_path.startswith(dev_fragment) and tp is not None:
                     has_transport = True
+                    codec_v = tp.get("Codec")
+                    codec = a2dp_codec_name(codec_v.value if codec_v is not None else None)
                     break
 
             # Extract adapter name from path: /org/bluez/hci0/dev_XX → hci0
@@ -335,6 +352,8 @@ class BluezAdapter:
                     "bearers": bearers,
                     "has_transport": has_transport,
                     "cod_matched": cod_matched,
+                    "battery": battery,
+                    "codec": codec,
                 }
             )
 

@@ -33,7 +33,7 @@ export default {
         for (const b of d.bearers) {
           out.push({
             color: "secondary",
-            title: b === "BR/EDR" ? "Classic Bluetooth" : "Bluetooth Low Energy",
+            title: b === "BR/EDR" ? this.$t("capability.classic") : this.$t("capability.le"),
             text: b,
           });
         }
@@ -48,17 +48,17 @@ export default {
 
       if (hasA2dp) {
         if (connected && (!this.hfpSwitching || activeProfile === "a2dp")) {
-          out.push({ color: "success", title: "A2DP stereo audio (active)", text: "A2DP ✓" });
+          out.push({ color: "success", title: this.$t("capability.a2dpActive"), text: "A2DP ✓" });
         } else {
-          out.push({ color: "info", title: "A2DP stereo audio available", text: "A2DP" });
+          out.push({ color: "info", title: this.$t("capability.a2dpAvailable"), text: "A2DP" });
         }
       }
 
       if (hasHfpHsp) {
         if (connected && this.hfpSwitching && activeProfile === "hfp") {
-          out.push({ color: "success", title: "HFP/HSP mono + mic (active)", text: "HFP ✓" });
+          out.push({ color: "success", title: this.$t("capability.hfpActive"), text: "HFP ✓" });
         } else if (!connected || this.hfpSwitching) {
-          out.push({ color: "info", title: "Hands-Free / Headset Profile available", text: "HFP" });
+          out.push({ color: "info", title: this.$t("capability.hfpAvailable"), text: "HFP" });
         }
       }
 
@@ -67,11 +67,11 @@ export default {
       );
       if (hasAvrcpCap) {
         if (!connected) {
-          out.push({ color: "info", title: "AVRCP media control available", text: "AVRCP" });
+          out.push({ color: "info", title: this.$t("capability.avrcpAvailable"), text: "AVRCP" });
         } else if (d.avrcp_enabled !== false) {
-          out.push({ color: "success", title: "Media buttons enabled", text: "AVRCP ✓" });
+          out.push({ color: "success", title: this.$t("capability.avrcpEnabled"), text: "AVRCP ✓" });
         } else {
-          out.push({ color: "warning", title: "Media buttons disabled", text: "AVRCP ✗" });
+          out.push({ color: "warning", title: this.$t("capability.avrcpDisabled"), text: "AVRCP ✗" });
         }
       }
 

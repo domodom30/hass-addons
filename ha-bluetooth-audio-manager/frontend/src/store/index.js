@@ -353,6 +353,14 @@ const store = createStore({
       });
       return resp;
     },
+    async renameDevice({ commit }, { address, name }) {
+      try {
+        await api.renameDevice(address, name);
+        commit("setNotice", { message: "Device renamed" });
+      } catch (e) {
+        commit("setError", { message: `Rename failed: ${e.message}` });
+      }
+    },
     async restart() {
       api.restart().catch(() => {});
     },

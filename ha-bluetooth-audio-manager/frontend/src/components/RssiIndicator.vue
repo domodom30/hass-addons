@@ -26,7 +26,7 @@ export default {
     },
     title() {
       const q = this.device.signal_quality || "unknown";
-      return this.stale ? `${q} (last seen during scan)` : q;
+      return this.stale ? this.$t("rssi.lastSeen", { quality: q }) : q;
     },
   },
 };

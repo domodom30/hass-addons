@@ -22,6 +22,7 @@ DEVICE_INTERFACE = "org.bluez.Device1"
 AGENT_INTERFACE = "org.bluez.Agent1"
 AGENT_MANAGER_INTERFACE = "org.bluez.AgentManager1"
 MEDIA_TRANSPORT_INTERFACE = "org.bluez.MediaTransport1"
+BATTERY_INTERFACE = "org.bluez.Battery1"
 PROPERTIES_INTERFACE = "org.freedesktop.DBus.Properties"
 OBJECT_MANAGER_INTERFACE = "org.freedesktop.DBus.ObjectManager"
 
@@ -105,6 +106,25 @@ COD_AUDIO_SINK_MINORS = frozenset({
     15,  # Video Display and Loudspeaker
     16,  # Video Conferencing
 })
+
+
+# ── A2DP codec id → name (A2DP spec §4) ──────────────────────────────
+# Vendor codecs (aptX, LDAC…) all use id 0xFF; decoding the actual vendor
+# requires parsing the Configuration byte-array, which is out of scope.
+_A2DP_CODEC_NAMES = {
+    0x00: "SBC",
+    0x01: "MPEG",
+    0x02: "AAC",
+    0x04: "AAC-LD",
+    0xFF: "Vendor",
+}
+
+
+def a2dp_codec_name(codec: int | None) -> str | None:
+    """Map a MediaTransport1.Codec id to a human-readable name."""
+    if codec is None:
+        return None
+    return _A2DP_CODEC_NAMES.get(codec, f"0x{codec:02X}")
 
 
 def is_cod_audio_sink(cod: int) -> bool:

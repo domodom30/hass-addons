@@ -86,8 +86,26 @@ def create_api_routes(
 
     @routes.get("/api/health")
     async def health(request: web.Request) -> web.Response:
-        """Liveness check for the HA watchdog."""
-        return web.json_response({"status": "ok"})
+        """Health check for the HA watchdog (200 healthy / 503 degraded)."""
+        checks = {
+            "dbus": manager.bus is not None,
+            # PulseAudio is non-fatal: the manager tolerates pulse=None.
+            "pulse": manager.pulse is not None,
+            "adapter_powered": False,
+        }
+        try:
+            adapters = await manager.list_adapters()
+            checks["adapter_powered"] = any(
+                a["path"] == manager._adapter_path and a["powered"]
+                for a in adapters
+            )
+        except Exception as e:
+            logger.debug("Health adapter check failed: %s", e)
+        ok = checks["dbus"] and checks["adapter_powered"]
+        return web.json_response(
+            {"status": "ok" if ok else "degraded", "checks": checks},
+            status=200 if ok else 503,
+        )
 
     @routes.get("/api/info")
     async def info(request: web.Request) -> web.Response:
@@ -472,6 +490,45 @@ def create_api_routes(
         except Exception as e:
             logger.error("Failed to update settings for %s: %s", address, e)
             return web.json_response({"error": str(e)}, status=500)
+
+    @routes.put("/api/devices/{address}/name")
+    async def rename_device(request: web.Request) -> web.Response:
+        """Rename a device (updates the store and BlueZ Alias)."""
+        address = request.match_info["address"]
+        if not _MAC_RE.match(address):
+            return web.json_response(
+                {"error": "Invalid Bluetooth address format (expected XX:XX:XX:XX:XX:XX)"},
+                status=400,
+            )
+        try:
+            body = await request.json()
+            name = (body.get("name") or "").strip()
+            if not name or len(name) > 64:
+                return web.json_response(
+                    {"error": "name must be 1-64 characters"}, status=400
+                )
+            # Auto-store paired devices not yet tracked (same pattern as settings)
+            if manager.store.get_device(address) is None:
+                bluez_dev = manager.managed_devices.get(address)
+                if not bluez_dev:
+                    try:
+                        bluez_dev = await manager._get_or_create_device(address)
+                    except Exception:
+                        bluez_dev = None
+                if not bluez_dev:
+                    return web.json_response(
+                        {"error": f"Device {address} not found"}, status=404
+                    )
+                await manager.store.add_device(address, await bluez_dev.get_name())
+            ok = await manager.rename_device(address, name)
+            if not ok:
+                return web.json_response(
+                    {"error": f"Device {address} not found"}, status=404
+                )
+            return web.json_response({"address": address, "name": name})
+        except Exception as e:
+            logger.error("Failed to rename %s: %s", address, e)
+            return web.json_response({"error": _friendly_error(e)}, status=500)
 
     @routes.get("/api/settings")
     async def get_settings(request: web.Request) -> web.Response:

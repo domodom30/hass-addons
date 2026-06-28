@@ -76,9 +76,9 @@ export default {
       return "secondary";
     },
     kindLabel(kind) {
-      if (kind === "mpris") return "MPRIS";
-      if (kind === "avrcp") return "AVRCP";
-      return "Transport";
+      if (kind === "mpris") return this.$t("eventKind.mpris");
+      if (kind === "avrcp") return this.$t("eventKind.avrcp");
+      return this.$t("eventKind.transport");
     },
   },
 };

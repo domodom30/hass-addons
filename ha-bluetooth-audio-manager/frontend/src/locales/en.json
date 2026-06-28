@@ -63,7 +63,43 @@
     "pairedNoProfiles": "Paired but no audio profiles found",
     "powerSave": "Power Save",
     "stayAwake": "Stay Awake",
-    "autoDisconnect": "Auto-Disconnect"
+    "autoDisconnect": "Auto-Disconnect",
+    "autoReconnectOn": "Auto-reconnect",
+    "autoReconnectOff": "No reconnect",
+    "rename": "Rename",
+    "battery": "Battery"
+  },
+  "capability": {
+    "classic": "Classic Bluetooth",
+    "le": "Bluetooth Low Energy",
+    "a2dpActive": "A2DP stereo audio (active)",
+    "a2dpAvailable": "A2DP stereo audio available",
+    "hfpActive": "HFP/HSP mono + mic (active)",
+    "hfpAvailable": "Hands-Free / Headset Profile available",
+    "avrcpAvailable": "AVRCP media control available",
+    "avrcpEnabled": "Media buttons enabled",
+    "avrcpDisabled": "Media buttons disabled"
+  },
+  "rssi": {
+    "lastSeen": "{quality} (last seen during scan)"
+  },
+  "eventKind": {
+    "transport": "Transport",
+    "mpris": "MPRIS",
+    "avrcp": "AVRCP"
+  },
+  "disconnectConfirm": {
+    "title": "Disconnect device",
+    "message": "Disconnect {name}?"
+  },
+  "pairConfirm": {
+    "title": "Pair device",
+    "message": "Pair with {name}?"
+  },
+  "rename": {
+    "title": "Rename device",
+    "label": "Device name",
+    "action": "Rename"
   },
   "sink": {
     "streaming": "Streaming",

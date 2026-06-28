@@ -61,6 +61,7 @@
         <v-btn
           color="primary"
           variant="flat"
+          :loading="saving"
           prepend-icon="mdi-content-save"
           @click="save"
         >
@@ -76,6 +77,7 @@ export default {
   name: "AppSettingsDialog",
   data() {
     return {
+      saving: false,
       form: {
         scan_duration_seconds: 30,
         auto_reconnect: true,
@@ -101,19 +103,24 @@ export default {
   },
   methods: {
     async save() {
-      await this.$store.dispatch("saveSettings", {
-        auto_reconnect: this.form.auto_reconnect,
-        reconnect_interval_seconds: parseInt(
-          this.form.reconnect_interval_seconds,
-          10,
-        ),
-        reconnect_max_backoff_seconds: parseInt(
-          this.form.reconnect_max_backoff_seconds,
-          10,
-        ),
-        scan_duration_seconds: parseInt(this.form.scan_duration_seconds, 10),
-      });
-      this.show = false;
+      this.saving = true;
+      try {
+        await this.$store.dispatch("saveSettings", {
+          auto_reconnect: this.form.auto_reconnect,
+          reconnect_interval_seconds: parseInt(
+            this.form.reconnect_interval_seconds,
+            10,
+          ),
+          reconnect_max_backoff_seconds: parseInt(
+            this.form.reconnect_max_backoff_seconds,
+            10,
+          ),
+          scan_duration_seconds: parseInt(this.form.scan_duration_seconds, 10),
+        });
+        this.show = false;
+      } finally {
+        this.saving = false;
+      }
     },
   },
 };
