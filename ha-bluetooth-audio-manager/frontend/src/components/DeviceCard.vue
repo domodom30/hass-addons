@@ -31,6 +31,14 @@
                     $t("device.settings")
                   }}</v-list-item-title>
                 </v-list-item>
+                <v-list-item @click="openRename">
+                  <template #prepend>
+                    <v-icon size="18" class="mr-3">mdi-rename-outline</v-icon>
+                  </template>
+                  <v-list-item-title class="text-caption">{{
+                    $t("device.rename")
+                  }}</v-list-item-title>
+                </v-list-item>
                 <v-list-item v-if="device.connected" @click="forceReconnect">
                   <template #prepend>
                     <v-icon size="18" class="mr-3">mdi-sync</v-icon>
@@ -63,6 +71,14 @@
       >
         <span>{{ device.address }}</span>
         <RssiIndicator :device="device" />
+        <span
+          v-if="device.battery != null"
+          class="d-inline-flex align-center ga-1"
+          :title="$t('device.battery')"
+        >
+          <v-icon size="13" :color="batteryColor">{{ batteryIcon }}</v-icon>
+          <span>{{ device.battery }}%</span>
+        </span>
         <span v-if="device.adapter"
           >{{ $t("device.on") }} {{ device.adapter }}</span
         >
@@ -84,6 +100,7 @@
         class="text-caption text-medium-emphasis d-flex align-center ga-1 mb-1"
       >
         <v-icon size="12">mdi-music</v-icon>
+        <span v-if="sinkInfo.codec">{{ sinkInfo.codec }} ·</span>
         <span v-if="sinkInfo.parts">{{ sinkInfo.parts }} ·</span>
         <v-chip size="x-small" variant="tonal" label>{{
           sinkInfo.stateLabel
@@ -153,6 +170,7 @@
       <template v-else-if="device.paired || device.stored">
         <v-btn
           color="success"
+          variant="tonal"
           size="small"
           prepend-icon="mdi-link"
           @click="connect"
@@ -163,6 +181,7 @@
       <template v-else>
         <v-btn
           color="primary"
+          variant="tonal"
           size="small"
           prepend-icon="mdi-handshake-outline"
           @click="pair"
@@ -178,6 +197,38 @@
         />
       </template>
     </v-card-actions>
+
+    <v-dialog v-model="renameOpen" max-width="400">
+      <v-card>
+        <v-card-title class="text-subtitle-1 font-weight-bold">{{
+          $t("rename.title")
+        }}</v-card-title>
+        <v-card-text class="pb-0">
+          <v-text-field
+            v-model="renameValue"
+            :label="$t('rename.label')"
+            autofocus
+            counter="64"
+            maxlength="64"
+            @keyup.enter="saveRename"
+          />
+        </v-card-text>
+        <v-card-actions class="px-4 py-3">
+          <v-btn color="error" variant="flat" @click="renameOpen = false">{{
+            $t("common.cancel")
+          }}</v-btn>
+          <v-spacer />
+          <v-btn
+            color="primary"
+            variant="flat"
+            :disabled="!renameValue.trim()"
+            @click="saveRename"
+          >
+            {{ $t("rename.action") }}
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
   </v-card>
 </template>
 
@@ -194,7 +245,7 @@ export default {
     device: { type: Object, required: true },
   },
   data() {
-    return { localVolume: 0, dragging: false };
+    return { localVolume: 0, dragging: false, renameOpen: false, renameValue: "" };
   },
   beforeUnmount() {
     clearTimeout(this._volTimer);
@@ -270,14 +321,44 @@ export default {
         suspended: this.$t("sink.suspended"),
       };
       return {
+        codec: this.device.codec || null,
         parts: parts.join(" / "),
         vol: sink.mute ? this.$t("sink.muted") : `${sink.volume}%`,
         stateLabel: stateMap[sink.state] || sink.state,
       };
     },
+    batteryIcon() {
+      const b = this.device.battery;
+      if (b == null) return "mdi-battery-unknown";
+      if (b <= 10) return "mdi-battery-alert";
+      if (b >= 95) return "mdi-battery";
+      return `mdi-battery-${Math.round(b / 10) * 10}`;
+    },
+    batteryColor() {
+      const b = this.device.battery;
+      if (b == null) return "medium-emphasis";
+      if (b < 20) return "error";
+      if (b < 40) return "warning";
+      return "success";
+    },
     featureChips() {
       const d = this.device;
       const out = [];
+      if (d.stored || d.paired) {
+        out.push(
+          d.auto_connect === false
+            ? {
+                color: "secondary",
+                icon: "mdi-autorenew-off",
+                text: this.$t("device.autoReconnectOff"),
+              }
+            : {
+                color: "success",
+                icon: "mdi-autorenew",
+                text: this.$t("device.autoReconnectOn"),
+              },
+        );
+      }
       const im = d.idle_mode || "default";
       if (im === "power_save") {
         out.push({
@@ -356,14 +437,45 @@ export default {
         address: this.device.address,
       });
     },
+    openRename() {
+      this.renameValue = this.device.name || "";
+      this.renameOpen = true;
+    },
+    saveRename() {
+      const name = this.renameValue.trim();
+      if (!name) return;
+      this.$store.dispatch("renameDevice", {
+        address: this.device.address,
+        name,
+      });
+      this.renameOpen = false;
+    },
     connect() {
       this.$store.dispatch("connect", this.device.address);
     },
-    disconnect() {
-      this.$store.dispatch("disconnect", this.device.address);
+    async disconnect() {
+      const ok = await this.confirm(
+        this.$t("disconnectConfirm.title"),
+        this.$t("disconnectConfirm.message", { name: this.device.name }),
+        {
+          color: "error",
+          icon: "mdi-link-off",
+          confirmText: this.$t("device.disconnect"),
+        },
+      );
+      if (ok) this.$store.dispatch("disconnect", this.device.address);
     },
-    pair() {
-      this.$store.dispatch("pair", this.device.address);
+    async pair() {
+      const ok = await this.confirm(
+        this.$t("pairConfirm.title"),
+        this.$t("pairConfirm.message", { name: this.device.name }),
+        {
+          color: "primary",
+          icon: "mdi-handshake-outline",
+          confirmText: this.$t("device.pair"),
+        },
+      );
+      if (ok) this.$store.dispatch("pair", this.device.address);
     },
     dismiss() {
       this.$store.dispatch("forget", this.device.address);

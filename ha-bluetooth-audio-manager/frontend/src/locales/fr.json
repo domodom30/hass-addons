@@ -63,7 +63,43 @@
     "pairedNoProfiles": "Appairé mais aucun profil audio trouvé",
     "powerSave": "Économie d'énergie",
     "stayAwake": "Maintenir éveillé",
-    "autoDisconnect": "Déconnexion auto"
+    "autoDisconnect": "Déconnexion auto",
+    "autoReconnectOn": "Reconnexion auto",
+    "autoReconnectOff": "Sans reconnexion",
+    "rename": "Renommer",
+    "battery": "Batterie"
+  },
+  "capability": {
+    "classic": "Bluetooth classique",
+    "le": "Bluetooth Low Energy",
+    "a2dpActive": "Audio stéréo A2DP (actif)",
+    "a2dpAvailable": "Audio stéréo A2DP disponible",
+    "hfpActive": "HFP/HSP mono + micro (actif)",
+    "hfpAvailable": "Profil mains-libres / casque disponible",
+    "avrcpAvailable": "Contrôle multimédia AVRCP disponible",
+    "avrcpEnabled": "Boutons multimédias activés",
+    "avrcpDisabled": "Boutons multimédias désactivés"
+  },
+  "rssi": {
+    "lastSeen": "{quality} (vu pour la dernière fois pendant la recherche)"
+  },
+  "eventKind": {
+    "transport": "Transport",
+    "mpris": "MPRIS",
+    "avrcp": "AVRCP"
+  },
+  "disconnectConfirm": {
+    "title": "Déconnecter le périphérique",
+    "message": "Déconnecter {name} ?"
+  },
+  "pairConfirm": {
+    "title": "Appairer le périphérique",
+    "message": "Appairer avec {name} ?"
+  },
+  "rename": {
+    "title": "Renommer le périphérique",
+    "label": "Nom du périphérique",
+    "action": "Renommer"
   },
   "sink": {
     "streaming": "Lecture",

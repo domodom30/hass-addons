@@ -160,6 +160,11 @@ class Api {
       settings,
     );
   }
+  renameDevice(address, name) {
+    return this._put(`/api/devices/${encodeURIComponent(address)}/name`, {
+      name,
+    });
+  }
 }
 
 export default Api;
