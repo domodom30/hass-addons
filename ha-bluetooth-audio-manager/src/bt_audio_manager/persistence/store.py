@@ -100,6 +100,16 @@ class PersistenceStore:
         await self.save()
         logger.info("Stored device %s (%s)", address, name)
 
+    async def rename_device(self, address: str, name: str) -> bool:
+        """Rename a stored device. Returns False if unknown."""
+        device = self._find_device(address)
+        if device is None:
+            return False
+        device["name"] = name
+        await self.save()
+        logger.info("Renamed device %s to %s", address, name)
+        return True
+
     async def remove_device(self, address: str) -> None:
         """Remove a device from the store."""
         self._devices = [d for d in self._devices if d["address"] != address]

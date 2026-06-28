@@ -702,6 +702,14 @@ class BluetoothAudioManager:
         if self.pulse:
             await self.pulse.disconnect()
 
+        # Release per-device D-Bus signal subscriptions
+        for dev in list(self.managed_devices.values()):
+            try:
+                dev.cleanup()
+            except Exception as exc:
+                logger.debug("Device cleanup failed: %s", exc)
+        self.managed_devices.clear()
+
         # Disconnect D-Bus (do NOT disconnect BT devices — user may want
         # audio to persist if the app restarts)
         if self.bus:
@@ -1314,6 +1322,8 @@ class BluetoothAudioManager:
                         "mpd_hw_volume": s.get("mpd_hw_volume", 100),
                         "avrcp_enabled": s.get("avrcp_enabled", True),
                         "auto_connect": s.get("auto_connect", True),
+                        "battery": None,
+                        "codec": None,
                     }
                 )
 
@@ -3084,6 +3094,20 @@ class BluetoothAudioManager:
         except Exception as e:
             logger.debug("MPD volume init for %s failed: %s", address, e)
 
+    async def rename_device(self, address: str, name: str) -> bool:
+        """Rename a device in the store and (best-effort) its BlueZ Alias."""
+        renamed = await self.store.rename_device(address, name)
+        if not renamed:
+            return False
+        dev = self.managed_devices.get(address)
+        if dev:
+            try:
+                await dev.set_alias(name)
+            except Exception as exc:
+                logger.debug("Alias write failed for %s: %s", address, exc)
+        await self._broadcast_devices()
+        return True
+
     async def _stop_mpd(self, address: str) -> None:
         """Stop the MPD instance for a specific device (keeps port assigned)."""
         mpd = self._mpd_instances.pop(address, None)
@@ -3106,7 +3130,7 @@ class BluetoothAudioManager:
                 await self._unregister_null_hfp_handler()
 
             if address in self._device_connect_time and self.pulse:
-                asyncio.create_task(
+                self._fire_and_forget(
                     self._apply_audio_profile(address, new_profile)
                 )
 
