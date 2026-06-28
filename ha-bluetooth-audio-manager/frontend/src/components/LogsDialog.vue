@@ -1,14 +1,11 @@
 <template>
   <v-dialog v-model="show" max-width="900" scrollable>
     <v-card>
-      <div class="d-flex align-center ga-3 px-5 py-3 flex-wrap">
-        <v-avatar size="36" color="primary" variant="tonal">
-          <v-icon size="20">mdi-text-box-outline</v-icon>
-        </v-avatar>
-        <div class="text-subtitle-1 font-weight-bold">{{ $t("logs.title") }}</div>
-        <v-spacer />
-        <v-btn icon="mdi-close" variant="text" size="small" @click="show = false" />
-      </div>
+      <DialogHeader
+        icon="mdi-text-box-outline"
+        :title="$t('logs.title')"
+        @close="show = false"
+      />
       <v-divider />
 
       <div class="px-5 py-2 d-flex align-center ga-3 flex-wrap bg-surface-variant">
@@ -54,8 +51,11 @@
 </template>
 
 <script>
+import DialogHeader from "@/components/base/DialogHeader.vue";
+
 export default {
   name: "LogsDialog",
+  components: { DialogHeader },
   data() {
     return {
       levelFilter: "",

@@ -28,14 +28,17 @@ const lightTheme = {
     "on-background": "#202124",
     "on-surface": "#202124",
     "on-surface-variant": "#666A70",
+
     primary: "#0A84FF",
     accent: "#00B7F2",
     secondary: "#6E737A",
     "secondary-darken-1": "#4E5359",
-    success: "#5CCB5F",
-    warning: "#F5A300",
-    error: "#E25B52",
-    info: "#4AA8FF",
+
+    success: "#34C759",
+    warning: "#FF9500",
+    error: "#e62b0fff",
+    info: "#55A6FF",
+
     outline: "#D5DADF",
     "outline-variant": "#E7EBEF",
   },
@@ -58,14 +61,17 @@ const darkTheme = {
     "on-background": "#F2F2F2",
     "on-surface": "#F2F2F2",
     "on-surface-variant": "#B8B8B8",
+
     primary: "#0A84FF",
     accent: "#00B7F2",
     secondary: "#8D8D8D",
     "secondary-darken-1": "#727272",
-    success: "#5CCB5F",
-    warning: "#FFB300",
-    error: "#E25B52",
-    info: "#4AA8FF",
+
+    success: "#30D158",
+    warning: "#FF9F0A",
+    error: "#e62b0fff",
+    info: "#64D2FF",
+
     outline: "#353535",
     "outline-variant": "#2B2B2B",
   },
@@ -96,8 +102,16 @@ export default createVuetify({
   defaults: {
     global: { ripple: true },
     VCard: { elevation: 0, rounded: "lg", border: "thin" },
-    VBtn: { rounded: "lg", class: "text-none font-weight-medium", variant: "flat" },
-    VTextField: { variant: "outlined", density: "comfortable", color: "primary" },
+    VBtn: {
+      rounded: "lg",
+      class: "text-none font-weight-medium",
+      variant: "flat",
+    },
+    VTextField: {
+      variant: "outlined",
+      density: "comfortable",
+      color: "primary",
+    },
     VSelect: {
       variant: "outlined",
       density: "comfortable",

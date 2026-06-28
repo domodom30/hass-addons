@@ -1,19 +1,20 @@
 <template>
   <v-dialog v-model="show" max-width="760" scrollable>
     <v-card>
-      <div class="d-flex align-center ga-3 px-5 py-3">
-        <v-avatar size="36" color="info" variant="tonal">
-          <v-icon size="20">mdi-chip</v-icon>
-        </v-avatar>
-        <div class="text-subtitle-1 font-weight-bold flex-grow-1">{{ $t("adapters.title") }}</div>
-        <v-btn icon="mdi-close" variant="text" size="small" @click="show = false" />
-      </div>
+      <DialogHeader
+        icon="mdi-chip"
+        color="info"
+        :title="$t('adapters.title')"
+        @close="show = false"
+      />
       <v-divider />
       <v-card-text class="pa-5">
         <v-alert type="warning" variant="tonal" density="compact" class="mb-3">
           <strong>{{ $t("adapters.recommendation") }}</strong> {{ $t("adapters.recommendationBody") }}
         </v-alert>
-        <p class="text-body-2 text-medium-emphasis mb-4">{{ $t("adapters.onlyOne") }}</p>
+         <v-alert type="info" variant="tonal" density="compact" class="mb-3">
+          {{ $t("adapters.onlyOne") }}
+        </v-alert>
 
         <div v-if="adapters === null" class="text-center py-6">
           <v-progress-circular indeterminate color="primary" />
@@ -61,8 +62,11 @@
 </template>
 
 <script>
+import DialogHeader from "@/components/base/DialogHeader.vue";
+
 export default {
   name: "AdaptersDialog",
+  components: { DialogHeader },
   inject: ["confirm"],
   computed: {
     show: {

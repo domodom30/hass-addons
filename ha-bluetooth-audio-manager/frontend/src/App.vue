@@ -109,10 +109,10 @@ body,
   text-rendering: optimizeLegibility;
 }
 
-.v-alert.text-warning,
-.v-alert.text-warning .v-alert__content {
-  font-size: 12px;
-  line-height: 1.4;
+.v-alert,
+.v-alert .v-alert__content {
+  font-size: 0.85rem;
+  line-height: 1.2;
 }
 
 /* Smaller typography for switches and dropdowns */
@@ -144,6 +144,7 @@ body,
   bottom: 24px;
   z-index: 1006;
 }
+
 
 @media (max-width: 600px) {
   .page-container {

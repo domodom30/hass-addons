@@ -13,51 +13,60 @@
             <v-chip :color="statusColor" size="small" variant="tonal" label>
               {{ statusText }}
             </v-chip>
-            <v-menu v-if="showMenu" location="bottom end">
-              <template #activator="{ props }">
-                <v-btn
-                  v-bind="props"
-                  icon="mdi-dots-vertical"
-                  variant="text"
-                  size="small"
-                />
-              </template>
-              <v-list density="compact" min-width="190">
-                <v-list-item @click="openSettings">
-                  <template #prepend>
-                    <v-icon size="18" class="mr-3">mdi-cog-outline</v-icon>
-                  </template>
-                  <v-list-item-title class="text-caption">{{
-                    $t("device.settings")
-                  }}</v-list-item-title>
-                </v-list-item>
-                <v-list-item @click="openRename">
-                  <template #prepend>
-                    <v-icon size="18" class="mr-3">mdi-rename-outline</v-icon>
-                  </template>
-                  <v-list-item-title class="text-caption">{{
-                    $t("device.rename")
-                  }}</v-list-item-title>
-                </v-list-item>
-                <v-list-item v-if="device.connected" @click="forceReconnect">
-                  <template #prepend>
-                    <v-icon size="18" class="mr-3">mdi-sync</v-icon>
-                  </template>
-                  <v-list-item-title class="text-caption">{{
-                    $t("device.forceReconnect")
-                  }}</v-list-item-title>
-                </v-list-item>
-                <v-divider class="my-1" />
-                <v-list-item base-color="error" @click="forget">
-                  <template #prepend>
-                    <v-icon size="18" class="mr-3">mdi-delete-outline</v-icon>
-                  </template>
-                  <v-list-item-title class="text-caption">{{
-                    $t("device.forget")
-                  }}</v-list-item-title>
-                </v-list-item>
-              </v-list>
-            </v-menu>
+              <v-menu v-if="showMenu" location="bottom end">
+                <template #activator="{ props }">
+                  <v-btn
+                    v-bind="props"
+                    icon="mdi-dots-vertical"
+                    variant="text"
+                    size="small"
+                  />
+                </template>
+                <v-list density="compact" min-width="190">
+                  <!-- Configuration : Bleu/Gris neutre ou Primary -->
+                  <v-list-item @click="openSettings">
+                    <template #prepend>
+                      <v-icon size="18" class="mr-3" color="primary">mdi-cog-outline</v-icon>
+                    </template>
+                    <v-list-item-title class="text-caption">
+                      {{ $t("device.settings") }}
+                    </v-list-item-title>
+                  </v-list-item>
+
+                  <!-- Renommer : Nuance secondaire ou violet/indigo -->
+                  <v-list-item @click="openRename">
+                    <template #prepend>
+                      <v-icon size="18" class="mr-3" color="secondary">mdi-rename-outline</v-icon>
+                    </template>
+                    <v-list-item-title class="text-caption">
+                      {{ $t("device.rename") }}
+                    </v-list-item-title>
+                  </v-list-item>
+
+                  <!-- Synchroniser : Vert (Succès/Action positive) ou Info -->
+                  <v-list-item v-if="device.connected" @click="forceReconnect">
+                    <template #prepend>
+                      <v-icon size="18" class="mr-3" color="success">mdi-sync</v-icon>
+                    </template>
+                    <v-list-item-title class="text-caption">
+                      {{ $t("device.forceReconnect") }}
+                    </v-list-item-title>
+                  </v-list-item>
+
+                  <v-divider class="my-1" />
+
+                  <!-- Supprimer : Rouge (Erreur/Danger) -->
+                  <!-- Utiliser base-color="error" colore automatiquement l'icône et le texte proprement -->
+                  <v-list-item base-color="error" @click="forget">
+                    <template #prepend>
+                      <v-icon size="18" class="mr-3">mdi-delete-outline</v-icon>
+                    </template>
+                    <v-list-item-title class="text-caption">
+                      {{ $t("device.forget") }}
+                    </v-list-item-title>
+                  </v-list-item>
+                </v-list>
+              </v-menu>
           </div>
         </div>
       </template>
