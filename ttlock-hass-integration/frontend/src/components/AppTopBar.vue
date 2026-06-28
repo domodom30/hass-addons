@@ -1,33 +1,54 @@
 <template>
-  <v-app-bar
-    color="surface"
-    flat
-    density="default"
-    border="b-thin"
-    height="56"
-  >
+  <v-app-bar color="surface" flat density="default" border="b-thin" height="56">
+    <div class="d-flex align-center gap-3 px-3">
+      <!-- Logo cliquable -->
+      <router-link
+        to="/"
+        class="text-decoration-none d-flex align-center home-link"
+      >
+        <v-icon size="26" color="primary"> mdi-lock </v-icon>
+      </router-link>
 
-    <router-link to="/" class="d-flex align-center gap-2 px-3 text-decoration-none home-link">
-      <!-- Logo avec tooltip version -->
-      <v-tooltip :text="`TTLock v${version}`" location="bottom">
-        <template #activator="{ props }">
-          <v-icon v-bind="props" size="26" color="primary">mdi-lock</v-icon>
-        </template>
-      </v-tooltip>
+      <!-- Titre + version non cliquables -->
+      <div class="d-flex flex-column">
+        <span class="text-body-1 font-weight-bold">
+          TTLock in Bluetooth mode
+        </span>
 
-      <!-- Titre app -->
-      <span class="text-body-1 font-weight-bold ml-1">TTLock</span>
-    </router-link>
+        <div class="d-flex align-center ga-1">
+          <span class="version-badge"> v{{ version }} </span>
+
+          <v-tooltip text="GitHub" location="bottom">
+            <template #activator="{ props }">
+              <a
+                v-bind="props"
+                :href="github"
+                target="_blank"
+                rel="noopener noreferrer"
+                class="github-link"
+              >
+                <v-icon size="16">mdi-github</v-icon>
+              </a>
+            </template>
+          </v-tooltip>
+        </div>
+      </div>
+    </div>
 
     <v-spacer />
 
     <!-- CENTRE : badges statut serrures -->
-    <div v-if="totalLocks > 0" class="badges-group d-flex align-center ga-3 px-3 py-1">
-
+    <div
+      v-if="totalLocks > 0"
+      class="badges-group d-flex align-center ga-3 px-3 py-1"
+    >
       <!-- Total serrures -->
       <v-tooltip :text="$t('dashboard.totalLocks')" location="bottom">
         <template #activator="{ props }">
-          <div v-bind="props" class="d-flex align-center ga-1 text-caption badge-item">
+          <div
+            v-bind="props"
+            class="d-flex align-center ga-1 text-caption badge-item"
+          >
             <v-icon size="14" color="primary">mdi-lock-outline</v-icon>
             <span class="font-weight-medium">{{ totalLocks }}</span>
           </div>
@@ -37,10 +58,18 @@
       <v-divider vertical />
 
       <!-- Connectées -->
-      <v-tooltip :text="`${connectedLocks}/${totalLocks} ${$t('dashboard.connected').toLowerCase()}`" location="bottom">
+      <v-tooltip
+        :text="`${connectedLocks}/${totalLocks} ${$t('dashboard.connected').toLowerCase()}`"
+        location="bottom"
+      >
         <template #activator="{ props }">
-          <div v-bind="props" class="d-flex align-center ga-1 text-caption badge-item">
-            <v-icon size="14" :color="connectedColor">mdi-bluetooth-connect</v-icon>
+          <div
+            v-bind="props"
+            class="d-flex align-center ga-1 text-caption badge-item"
+          >
+            <v-icon size="14" :color="connectedColor"
+              >mdi-bluetooth-connect</v-icon
+            >
             <span class="font-weight-medium" :class="`text-${connectedColor}`">
               {{ connectedLocks }}/{{ totalLocks }}
             </span>
@@ -51,11 +80,21 @@
       <!-- Batterie faible (uniquement si > 0) -->
       <template v-if="lowBattery > 0">
         <v-divider vertical />
-        <v-tooltip :text="`${lowBattery} ${$t('dashboard.lowBattery').toLowerCase()}`" location="bottom">
+        <v-tooltip
+          :text="`${lowBattery} ${$t('dashboard.lowBattery').toLowerCase()}`"
+          location="bottom"
+        >
           <template #activator="{ props }">
-            <div v-bind="props" class="d-flex align-center ga-1 text-caption badge-item">
-              <v-icon size="14" color="warning">mdi-battery-alert-variant-outline</v-icon>
-              <span class="font-weight-medium text-warning">{{ lowBattery }}</span>
+            <div
+              v-bind="props"
+              class="d-flex align-center ga-1 text-caption badge-item"
+            >
+              <v-icon size="14" color="warning"
+                >mdi-battery-alert-variant-outline</v-icon
+              >
+              <span class="font-weight-medium text-warning">{{
+                lowBattery
+              }}</span>
             </div>
           </template>
         </v-tooltip>
@@ -67,9 +106,12 @@
     <!-- DROITE : boutons d'action -->
     <template #append>
       <div class="d-flex align-center ga-1 pr-2">
-
         <!-- Indicateur de statut démarrage -->
-        <v-tooltip v-if="startupStatus !== 0" :text="startupStatusTxt" location="bottom">
+        <v-tooltip
+          v-if="startupStatus !== 0"
+          :text="startupStatusTxt"
+          location="bottom"
+        >
           <template #activator="{ props }">
             <v-chip
               v-bind="props"
@@ -98,7 +140,9 @@
               <template #activator="{ props: tooltipProps }">
                 <v-btn
                   v-bind="{ ...menuProps, ...tooltipProps }"
-                  :icon="isRestartingGateway || isRebootingEsp32 ? null : gatewayIcon"
+                  :icon="
+                    isRestartingGateway || isRebootingEsp32 ? null : gatewayIcon
+                  "
                   :loading="isRestartingGateway || isRebootingEsp32"
                   :color="gatewayChipColor"
                   variant="text"
@@ -113,10 +157,14 @@
               @click="$store.dispatch('restartGateway')"
             >
               <template #prepend>
-                <v-icon color="warning" size="18" class="mr-3">mdi-lan-pending</v-icon>
+                <v-icon color="warning" size="18" class="mr-3"
+                  >mdi-lan-pending</v-icon
+                >
               </template>
               <template #title>
-                <span class="text-caption">{{ $t('app.gateway.restart') }}</span>
+                <span class="text-caption">{{
+                  $t("app.gateway.restart")
+                }}</span>
               </template>
             </v-list-item>
             <v-list-item
@@ -124,10 +172,14 @@
               @click="$store.dispatch('rebootEsp32')"
             >
               <template #prepend>
-                <v-icon color="error" size="18" class="mr-3">mdi-restart</v-icon>
+                <v-icon color="error" size="18" class="mr-3"
+                  >mdi-restart</v-icon
+                >
               </template>
               <template #title>
-                <span class="text-caption">{{ $t('app.gateway.rebootEsp32') }}</span>
+                <span class="text-caption">{{
+                  $t("app.gateway.rebootEsp32")
+                }}</span>
               </template>
             </v-list-item>
             <v-divider class="my-1" />
@@ -138,10 +190,14 @@
               rel="noopener noreferrer"
             >
               <template #prepend>
-                <v-icon color="primary" size="18" class="mr-3">mdi-open-in-new</v-icon>
+                <v-icon color="primary" size="18" class="mr-3"
+                  >mdi-open-in-new</v-icon
+                >
               </template>
               <template #title>
-                <span class="text-caption">{{ $t('app.gateway.openWeb') }}</span>
+                <span class="text-caption">{{
+                  $t("app.gateway.openWeb")
+                }}</span>
               </template>
             </v-list-item>
           </v-list>
@@ -163,33 +219,54 @@
         <!-- Menu overflow (activité globale, configuration, alias) -->
         <v-menu location="bottom end">
           <template #activator="{ props }">
-            <v-btn v-bind="props" icon="mdi-dots-vertical" variant="text" size="small" />
+            <v-btn
+              v-bind="props"
+              icon="mdi-dots-vertical"
+              variant="text"
+              size="small"
+            />
           </template>
           <v-list density="compact" min-width="240">
             <v-list-item @click="openGlobalActivity">
               <template #prepend>
-                <v-icon color="success" size="18" class="mr-3">mdi-console-line</v-icon>
+                <v-icon color="success" size="18" class="mr-3"
+                  >mdi-console-line</v-icon
+                >
               </template>
-              <v-list-item-title class="text-caption">{{ $t('operations.allTitle') }}</v-list-item-title>
+              <v-list-item-title class="text-caption">{{
+                $t("operations.allTitle")
+              }}</v-list-item-title>
             </v-list-item>
             <v-list-item :disabled="isScanning" @click="editConfig">
               <template #prepend>
-                <v-icon color="primary" size="18" class="mr-3">mdi-tune-variant</v-icon>
+                <v-icon color="primary" size="18" class="mr-3"
+                  >mdi-tune-variant</v-icon
+                >
               </template>
-              <v-list-item-title class="text-caption">{{ $t('app.editConfig') }}</v-list-item-title>
+              <v-list-item-title class="text-caption">{{
+                $t("app.editConfig")
+              }}</v-list-item-title>
             </v-list-item>
             <v-divider class="my-1" />
             <v-list-item @click="exportAliases">
               <template #prepend>
-                <v-icon color="primary" size="18" class="mr-3">mdi-download-outline</v-icon>
+                <v-icon color="primary" size="18" class="mr-3"
+                  >mdi-download-outline</v-icon
+                >
               </template>
-              <v-list-item-title class="text-caption">{{ $t('aliases.export') }}</v-list-item-title>
+              <v-list-item-title class="text-caption">{{
+                $t("aliases.export")
+              }}</v-list-item-title>
             </v-list-item>
             <v-list-item @click="$refs.aliasInput.click()">
               <template #prepend>
-                <v-icon color="secondary" size="18" class="mr-3">mdi-upload-outline</v-icon>
+                <v-icon color="secondary" size="18" class="mr-3"
+                  >mdi-upload-outline</v-icon
+                >
               </template>
-              <v-list-item-title class="text-caption">{{ $t('aliases.import') }}</v-list-item-title>
+              <v-list-item-title class="text-caption">{{
+                $t("aliases.import")
+              }}</v-list-item-title>
             </v-list-item>
           </v-list>
         </v-menu>
@@ -204,173 +281,205 @@
         />
       </div>
     </template>
-
   </v-app-bar>
 </template>
 
 <script>
-import { useTheme } from '@/composables/useTheme'
+import { useTheme } from "@/composables/useTheme";
 
 export default {
-  name: 'AppTopBar',
+  name: "AppTopBar",
   setup() {
-    const { isDark, toggleTheme } = useTheme()
-    return { isDark, toggleTheme }
+    const { isDark, toggleTheme } = useTheme();
+    return { isDark, toggleTheme };
   },
   computed: {
     version() {
-      return import.meta.env.VITE_APP_VERSION || '2.1.0'
+      return import.meta.env.VITE_APP_VERSION || "2.5.0";
+    },
+    github() {
+      return import.meta.env.VITE_APP_GITHUB || " ";
     },
     startupStatus() {
-      return this.$store.state.startupStatus
+      return this.$store.state.startupStatus;
     },
     startupStatusTxt() {
       switch (this.startupStatus) {
-        case 0: return this.$t('app.status.ok')
-        case 1: return this.$t('app.status.error')
-        default: return this.$t('app.status.starting')
+        case 0:
+          return this.$t("app.status.ok");
+        case 1:
+          return this.$t("app.status.error");
+        default:
+          return this.$t("app.status.starting");
       }
     },
     startupStatusShort() {
-      return this.startupStatus === 1 ? '!' : '...'
+      return this.startupStatus === 1 ? "!" : "...";
     },
     gatewayStatus() {
-      return this.$store.state.gatewayStatus
+      return this.$store.state.gatewayStatus;
     },
     gatewayHost() {
-      return this.$store.state.gatewayHost
+      return this.$store.state.gatewayHost;
     },
     gatewayWebUrl() {
-      const ip = this.gatewayHost.split(':')[0]
-      return ip ? `https://${ip}` : null
+      const ip = this.gatewayHost.split(":")[0];
+      return ip ? `https://${ip}` : null;
     },
     showGatewayChip() {
-      return this.gatewayStatus !== 'n/a' && this.gatewayStatus !== ''
+      return this.gatewayStatus !== "n/a" && this.gatewayStatus !== "";
     },
     gatewayChipColor() {
       switch (this.gatewayStatus) {
-        case 'connected': return 'success'
-        case 'disconnected': return 'error'
-        default: return 'warning'
+        case "connected":
+          return "success";
+        case "disconnected":
+          return "error";
+        default:
+          return "warning";
       }
     },
     gatewayIcon() {
       switch (this.gatewayStatus) {
-        case 'connected': return 'mdi-lan-connect'
-        case 'disconnected': return 'mdi-lan-disconnect'
-        default: return 'mdi-help-network'
+        case "connected":
+          return "mdi-lan-connect";
+        case "disconnected":
+          return "mdi-lan-disconnect";
+        default:
+          return "mdi-help-network";
       }
     },
     gatewayStatusTxt() {
       switch (this.gatewayStatus) {
-        case 'connected': return this.$t('app.gateway.connected', { host: this.gatewayHost })
-        case 'connecting': return this.$t('app.gateway.connecting')
-        case 'disconnected': return this.$t('app.gateway.disconnected')
-        case 'unknown': return this.$t('app.gateway.unknown')
-        default: return ''
+        case "connected":
+          return this.$t("app.gateway.connected", { host: this.gatewayHost });
+        case "connecting":
+          return this.$t("app.gateway.connecting");
+        case "disconnected":
+          return this.$t("app.gateway.disconnected");
+        case "unknown":
+          return this.$t("app.gateway.unknown");
+        default:
+          return "";
       }
     },
     isScanning() {
-      return this.$store.state.scanStatus == 1
+      return this.$store.state.scanStatus == 1;
     },
     totalLocks() {
-      return this.$store.state.locks.length
+      return this.$store.state.locks.length;
     },
     connectedLocks() {
-      return this.$store.state.locks.filter(l => l.connected).length
+      return this.$store.state.locks.filter((l) => l.connected).length;
     },
     lowBattery() {
       return this.$store.state.locks.filter(
-        l => typeof l.battery === 'number' && l.battery > 0 && l.battery < 20
-      ).length
+        (l) => typeof l.battery === "number" && l.battery > 0 && l.battery < 20,
+      ).length;
     },
     connectedColor() {
-      if (this.totalLocks === 0) return 'secondary'
-      if (this.connectedLocks === this.totalLocks) return 'success'
-      if (this.connectedLocks === 0) return 'error'
-      return 'warning'
+      if (this.totalLocks === 0) return "secondary";
+      if (this.connectedLocks === this.totalLocks) return "success";
+      if (this.connectedLocks === 0) return "error";
+      return "warning";
     },
     isRestartingGateway() {
-      return this.$store.state.waitingGatewayRestart
+      return this.$store.state.waitingGatewayRestart;
     },
     isRebootingEsp32() {
-      return this.$store.state.waitingEsp32Reboot
+      return this.$store.state.waitingEsp32Reboot;
     },
   },
   methods: {
     editConfig() {
-      this.$store.commit('setOverlay', { overlay: 'config' })
+      this.$store.commit("setOverlay", { overlay: "config" });
     },
     openGlobalActivity() {
-      this.$store.commit('setOverlay', { overlay: 'logs', address: null })
+      this.$store.commit("setOverlay", { overlay: "logs", address: null });
     },
 
     /** Construit l'URL de base de l'API (fonctionne en HA ingress et en dev Vite). */
     _apiBase() {
-      const loc = globalThis.location.href.replace(globalThis.location.hash, '')
-      if (loc.includes('/frontend/')) {
-        return loc.replace(/\/frontend\/.*$/, '/')
+      const loc = globalThis.location.href.replace(
+        globalThis.location.hash,
+        "",
+      );
+      if (loc.includes("/frontend/")) {
+        return loc.replace(/\/frontend\/.*$/, "/");
       }
-      return '/'
+      return "/";
     },
 
     exportAliases() {
-      const url = this._apiBase() + 'api/aliases'
-      const a = document.createElement('a')
+      const url = this._apiBase() + "api/aliases";
+      const a = document.createElement("a");
 
-      a.href = url
-      a.download = 'aliasData.json'
+      a.href = url;
+      a.download = "aliasData.json";
 
-      document.body.appendChild(a)
-      a.click()
-      a.remove()
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
     },
 
     async importAliases(event) {
-      const file = event.target.files[0]
+      const file = event.target.files[0];
       // Réinitialiser l'input pour permettre de re-sélectionner le même fichier
-      event.target.value = ''
-      if (!file) return
+      event.target.value = "";
+      if (!file) return;
 
       try {
-        const text = await file.text()
-        let data
+        const text = await file.text();
+        let data;
         try {
-          data = JSON.parse(text)
+          data = JSON.parse(text);
         } catch {
-          this.$store.commit('setError', { message: this.$t('aliases.importErrorJson') })
-          return
+          this.$store.commit("setError", {
+            message: this.$t("aliases.importErrorJson"),
+          });
+          return;
         }
 
         if (
-          !data || typeof data !== 'object' || Array.isArray(data) ||
-          typeof data.lock !== 'object' || Array.isArray(data.lock) ||
-          typeof data.card !== 'object' || Array.isArray(data.card) ||
-          typeof data.finger !== 'object' || Array.isArray(data.finger)
+          !data ||
+          typeof data !== "object" ||
+          Array.isArray(data) ||
+          typeof data.lock !== "object" ||
+          Array.isArray(data.lock) ||
+          typeof data.card !== "object" ||
+          Array.isArray(data.card) ||
+          typeof data.finger !== "object" ||
+          Array.isArray(data.finger)
         ) {
-          this.$store.commit('setError', { message: this.$t('aliases.importErrorFormat') })
-          return
+          this.$store.commit("setError", {
+            message: this.$t("aliases.importErrorFormat"),
+          });
+          return;
         }
 
-        const url = this._apiBase() + 'api/aliases'
+        const url = this._apiBase() + "api/aliases";
         const response = await fetch(url, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify(data),
-        })
+        });
 
         if (!response.ok) {
-          this.$store.commit('setError', { message: this.$t('aliases.importErrorServer') })
-          return
+          this.$store.commit("setError", {
+            message: this.$t("aliases.importErrorServer"),
+          });
+          return;
         }
 
-        this.$store.commit('setNotice', { message: 'aliases.importSuccess' })
+        this.$store.commit("setNotice", { message: "aliases.importSuccess" });
       } catch {
-        this.$store.commit('setError', { message: this.$t('aliases.importErrorServer') })
+        this.$store.commit("setError", {
+          message: this.$t("aliases.importErrorServer"),
+        });
       }
     },
   },
-}
+};
 </script>
 
 <style scoped>
@@ -379,8 +488,34 @@ export default {
   color: inherit;
   transition: opacity 0.15s ease;
 }
+
 .home-link:hover {
   opacity: 0.75;
+}
+
+.version-badge {
+  display: inline-block;
+  align-self: flex-start;
+  margin-top: 2px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: rgba(var(--v-theme-primary), 0.15);
+  color: rgb(var(--v-theme-primary));
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 16px;
+}
+
+.github-link {
+  display: flex;
+  align-items: center;
+  color: rgb(var(--v-theme-on-surface));
+  opacity: 0.7;
+  transition: opacity 0.15s ease;
+}
+
+.github-link:hover {
+  opacity: 1;
 }
 
 /* Groupe de badges centré */
