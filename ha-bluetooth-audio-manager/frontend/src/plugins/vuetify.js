@@ -98,7 +98,12 @@ export default createVuetify({
     VCard: { elevation: 0, rounded: "lg", border: "thin" },
     VBtn: { rounded: "lg", class: "text-none font-weight-medium", variant: "flat" },
     VTextField: { variant: "outlined", density: "comfortable", color: "primary" },
-    VSelect: { variant: "outlined", density: "comfortable", color: "primary" },
+    VSelect: {
+      variant: "outlined",
+      density: "comfortable",
+      color: "primary",
+      menuProps: { class: "select-menu-compact" },
+    },
     VSwitch: {
       color: "primary",
       density: "compact",

@@ -102,7 +102,7 @@ export default {
 html,
 body,
 .v-application {
-  font-family: "Roboto", -apple-system, BlinkMacSystemFont, "Segoe UI",
+  font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI",
     "Helvetica Neue", Arial, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -113,6 +113,23 @@ body,
 .v-alert.text-warning .v-alert__content {
   font-size: 12px;
   line-height: 1.4;
+}
+
+/* Smaller typography for switches and dropdowns */
+.v-switch .v-label,
+.v-select .v-field__input,
+.v-select .v-field__input input,
+.v-select .v-label {
+  font-size: 0.875rem;
+}
+
+.select-menu-compact .v-list-item-title {
+  font-size: 0.875rem;
+}
+
+/* Smaller buttons (higher specificity beats .v-btn--size-default) */
+.v-application .v-btn--size-default {
+  --v-btn-size: 0.8125rem;
 }
 
 .page-container {
