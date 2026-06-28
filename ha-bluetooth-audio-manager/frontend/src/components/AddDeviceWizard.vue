@@ -6,18 +6,12 @@
     transition="dialog-bottom-transition"
   >
     <v-card>
-      <div class="d-flex align-center ga-3 px-5 py-4">
-        <v-avatar size="36" color="primary" variant="tonal">
-          <v-icon size="20">mdi-bluetooth-audio</v-icon>
-        </v-avatar>
-        <div class="flex-grow-1">
-          <div class="text-subtitle-1 font-weight-bold">{{ $t("wizard.title") }}</div>
-          <div class="text-caption text-medium-emphasis">
-            {{ $t("wizard.step", { current: step, total: 3 }) }}
-          </div>
-        </div>
-        <v-btn icon="mdi-close" variant="text" size="small" @click="close" />
-      </div>
+      <DialogHeader
+        icon="mdi-bluetooth-audio"
+        :title="$t('wizard.title')"
+        :subtitle="$t('wizard.step', { current: step, total: 3 })"
+        @close="close"
+      />
 
       <div class="d-flex align-center px-5 pb-3 ga-2">
         <div
@@ -162,8 +156,11 @@
 </template>
 
 <script>
+import DialogHeader from "@/components/base/DialogHeader.vue";
+
 export default {
   name: "AddDeviceWizard",
+  components: { DialogHeader },
   data() {
     return {
       step: 1,

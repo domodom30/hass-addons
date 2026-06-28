@@ -1,145 +1,167 @@
 <template>
   <v-dialog v-model="show" max-width="560" scrollable>
     <v-card v-if="device">
-      <div class="d-flex align-center ga-3 px-5 py-3">
-        <v-avatar size="36" color="primary" variant="tonal">
-          <v-icon size="20">mdi-cog-outline</v-icon>
-        </v-avatar>
-        <div class="overflow-hidden flex-grow-1">
-          <div class="text-subtitle-1 font-weight-bold text-truncate">
-            {{ device.name }}
-          </div>
-          <div class="text-caption text-medium-emphasis font-mono">
-            {{ device.address }}
-          </div>
-        </div>
-        <v-btn
-          icon="mdi-close"
-          variant="text"
-          size="small"
-          @click="show = false"
-        />
-      </div>
+      <DialogHeader
+        icon="mdi-cog-outline"
+        :title="device.name"
+        :subtitle="device.address"
+        subtitle-mono
+        @close="show = false"
+      />
       <v-divider />
 
       <v-card-text class="pa-5">
-        <v-switch
-          v-model="form.autoConnect"
-          :label="$t('deviceSettings.autoReconnect')"
-          :messages="$t('deviceSettings.autoReconnectHelp')"
-        />
+        <DialogSection :title="$t('deviceSettings.sectionReconnect')" first>
+          <div>
+            <v-switch
+              v-model="form.autoConnect"
+              :label="$t('deviceSettings.autoReconnect')"
+              color="primary"
+              density="comfortable"
+              hide-details
+            />
+            <div class="text-caption font-italic text-medium-emphasis px-1">
+              {{ $t("deviceSettings.autoReconnectHelp") }}
+            </div>
+          </div>
+        </DialogSection>
 
-        <v-divider class="my-4" />
+        <DialogSection :title="$t('deviceSettings.sectionAudio')">
+          <div v-if="hfpSwitching">
+            <v-select
+              v-model="form.audioProfile"
+              :items="profileItems"
+              item-title="label"
+              item-value="value"
+              :label="$t('deviceSettings.audioProfile')"
+              hide-details
+            />
+            <div class="text-caption font-italic text-medium-emphasis mt-1 px-1">
+              {{
+                form.audioProfile === "hfp"
+                  ? $t("deviceSettings.hfpHelp")
+                  : $t("deviceSettings.a2dpHelp")
+              }}
+            </div>
+          </div>
 
-        <v-select
-          v-if="hfpSwitching"
-          v-model="form.audioProfile"
-          :items="profileItems"
-          item-title="label"
-          item-value="value"
-          :label="$t('deviceSettings.audioProfile')"
-          :hint="
-            form.audioProfile === 'hfp'
-              ? $t('deviceSettings.hfpHelp')
-              : $t('deviceSettings.a2dpHelp')
-          "
-          persistent-hint
-          class="mb-4"
-        />
+          <div>
+            <v-select
+              v-model="form.idleMode"
+              :items="idleItems"
+              item-title="label"
+              item-value="value"
+              :label="$t('deviceSettings.whenIdle')"
+              hide-details
+            />
+            <div class="text-caption font-italic text-medium-emphasis mt-1 px-1">
+              {{ idleHelp }}
+            </div>
+          </div>
 
-        <v-select
-          v-model="form.idleMode"
-          :items="idleItems"
-          item-title="label"
-          item-value="value"
-          :label="$t('deviceSettings.whenIdle')"
-          :hint="idleHelp"
-          persistent-hint
-          class="mb-4"
-        />
-
-        <v-select
-          v-if="form.idleMode === 'power_save'"
-          v-model="form.powerSaveDelay"
-          :items="delayItems"
-          item-title="label"
-          item-value="value"
-          :label="$t('deviceSettings.delayBeforeSuspend')"
-          class="mb-4"
-        />
-        <v-select
-          v-if="form.idleMode === 'keep_alive'"
-          v-model="form.kaMethod"
-          :items="methodItems"
-          item-title="label"
-          item-value="value"
-          :label="$t('deviceSettings.method')"
-          class="mb-4"
-        />
-        <v-select
-          v-if="form.idleMode === 'auto_disconnect'"
-          v-model="form.autoDisconnectMinutes"
-          :items="disconnectItems"
-          item-title="label"
-          item-value="value"
-          :label="$t('deviceSettings.disconnectAfter')"
-          class="mb-4"
-        />
-
-        <v-divider class="mb-4" />
-
-        <v-switch
-          v-model="form.mpdEnabled"
-          :label="$t('deviceSettings.mpd')"
-          :messages="$t('deviceSettings.mpdHelp')"
-        />
-        <template v-if="form.mpdEnabled">
-          <v-text-field
-            v-model.number="form.mpdHwVolume"
-            type="number"
-            min="1"
-            max="100"
-            :label="$t('deviceSettings.hwVolume')"
-            :hint="$t('deviceSettings.hwVolumeHelp')"
-            persistent-hint
-            class="mb-4"
+          <v-select
+            v-if="form.idleMode === 'power_save'"
+            v-model="form.powerSaveDelay"
+            :items="delayItems"
+            item-title="label"
+            item-value="value"
+            :label="$t('deviceSettings.delayBeforeSuspend')"
+            hide-details
           />
-          <v-text-field
-            v-model.number="form.mpdPort"
-            type="number"
-            min="6600"
-            max="6609"
-            :label="$t('deviceSettings.mpdPort')"
-            :hint="$t('deviceSettings.mpdPortHelp')"
-            persistent-hint
-            class="mb-3"
+          <v-select
+            v-if="form.idleMode === 'keep_alive'"
+            v-model="form.kaMethod"
+            :items="methodItems"
+            item-title="label"
+            item-value="value"
+            :label="$t('deviceSettings.method')"
+            hide-details
           />
-          <v-alert
-            v-if="form.mpdPort"
-            type="info"
-            variant="tonal"
-            density="compact"
-          >
-            {{ $t("deviceSettings.usePort", { port: form.mpdPort }) }}<br />
-            {{ $t("deviceSettings.host") }}: <code>{{ mpdHostname }}</code
-            ><br />
-            {{ $t("deviceSettings.password") }}:
-            <code>{{ mpdPasswordDisplay }}</code>
-          </v-alert>
-        </template>
+          <v-select
+            v-if="form.idleMode === 'auto_disconnect'"
+            v-model="form.autoDisconnectMinutes"
+            :items="disconnectItems"
+            item-title="label"
+            item-value="value"
+            :label="$t('deviceSettings.disconnectAfter')"
+            hide-details
+          />
+        </DialogSection>
 
-        <v-divider class="my-4" />
+        <DialogSection :title="$t('deviceSettings.sectionMpd')">
+          <div>
+            <v-switch
+              v-model="form.mpdEnabled"
+              :label="$t('deviceSettings.mpd')"
+              color="primary"
+              density="comfortable"
+              hide-details
+            />
+            <div class="text-caption font-italic text-medium-emphasis px-1">
+              {{ $t("deviceSettings.mpdHelp") }}
+            </div>
+          </div>
+          <template v-if="form.mpdEnabled">
+            <div>
+              <v-text-field
+                v-model.number="form.mpdHwVolume"
+                type="number"
+                min="1"
+                max="100"
+                :label="$t('deviceSettings.hwVolume')"
+                hide-details
+              />
+              <div class="text-caption font-italic text-medium-emphasis mt-1 px-1">
+                {{ $t("deviceSettings.hwVolumeHelp") }}
+              </div>
+            </div>
+            <div>
+              <v-text-field
+                v-model.number="form.mpdPort"
+                type="number"
+                min="6600"
+                max="6609"
+                :label="$t('deviceSettings.mpdPort')"
+                hide-details
+              />
+              <div class="text-caption font-italic text-medium-emphasis mt-1 px-1">
+                {{ $t("deviceSettings.mpdPortHelp") }}
+              </div>
+            </div>
+            <v-alert
+              v-if="form.mpdPort"
+              type="info"
+              variant="tonal"
+              density="compact"
+            >
+              {{ $t("deviceSettings.usePort", { port: form.mpdPort }) }}<br />
+              {{ $t("deviceSettings.host") }}: <code>{{ mpdHostname }}</code
+              ><br />
+              {{ $t("deviceSettings.password") }}:
+              <code>{{ mpdPasswordDisplay }}</code>
+            </v-alert>
+          </template>
+        </DialogSection>
 
-        <v-switch
-          v-model="form.avrcpEnabled"
-          :disabled="!hasAvrcpCap"
-          :label="$t('deviceSettings.mediaButtons')"
-          :messages="
-            hasAvrcpCap
-              ? $t('deviceSettings.avrcpHelp')
-              : $t('deviceSettings.avrcpUnsupported')
-          "
-        />
+        <DialogSection :title="$t('deviceSettings.sectionMediaButtons')">
+          <div>
+            <v-switch
+              v-model="form.avrcpEnabled"
+              :disabled="!hasAvrcpCap"
+              :label="$t('deviceSettings.mediaButtons')"
+              color="primary"
+              density="comfortable"
+              hide-details
+            />
+            <div class="text-caption font-italic text-medium-emphasis px-1">
+              {{
+                hasAvrcpCap
+                  ? $t("deviceSettings.avrcpHelp")
+                  : $t("deviceSettings.avrcpUnsupported")
+              }}
+            </div>
+          </div>
+        </DialogSection>
       </v-card-text>
 
       <v-divider />
@@ -164,9 +186,12 @@
 
 <script>
 import { AVRCP_TARGET, AVRCP_CONTROLLER, HFP_UUID, HSP_UUID } from "@/profiles";
+import DialogHeader from "@/components/base/DialogHeader.vue";
+import DialogSection from "@/components/base/DialogSection.vue";
 
 export default {
   name: "DeviceSettingsDialog",
+  components: { DialogHeader, DialogSection },
   data() {
     return {
       saving: false,

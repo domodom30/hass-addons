@@ -1,12 +1,12 @@
 <template>
   <v-dialog v-model="dialog" :max-width="options.width" @keydown.esc="cancel">
     <v-card>
-      <div class="d-flex align-center pa-5 pb-3 ga-3">
-        <v-avatar size="36" :color="options.color" variant="tonal">
-          <v-icon size="20">{{ options.icon }}</v-icon>
-        </v-avatar>
-        <div class="text-subtitle-1 font-weight-bold">{{ title }}</div>
-      </div>
+      <DialogHeader
+        :icon="options.icon"
+        :color="options.color"
+        :title="title"
+        :closable="false"
+      />
       <v-divider />
       <v-card-text v-show="!!message" class="pa-5 text-body-2">{{ message }}</v-card-text>
       <v-divider />
@@ -22,8 +22,11 @@
 </template>
 
 <script>
+import DialogHeader from "@/components/base/DialogHeader.vue";
+
 export default {
   name: "ConfirmDlg",
+  components: { DialogHeader },
   data() {
     return {
       dialog: false,

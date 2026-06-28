@@ -1,3 +1,31 @@
+## [3.0.0] — 2026-06-28
+
+### 🎨 Changed
+
+- **Redesigned dialogs**: every dialog (device settings, app settings,
+  adapters, add-device wizard, events, logs and confirmations) now shares a
+  consistent header and is organised into clearly titled sections with even
+  spacing — replacing the bare dividers and uneven layout.
+- **Device settings** are grouped into *Reconnection*, *Audio*, *MPD player*
+  and *Media buttons* sections; each field's hint now sits cleanly below the
+  control instead of crowding it.
+- **More vivid red** for the *Cancel* / *Close* (destructive) buttons and
+  error states.
+
+### 🐛 Fixed
+
+- Switch hints (auto-reconnect, MPD, AVRCP) no longer overflow and overlap the
+  next field in the settings dialogs.
+- Floating field labels (e.g. *Hardware volume*, *Delay before suspend*) no
+  longer crowd their input.
+
+### 🧱 Internal
+
+- Extracted shared `DialogHeader` and `DialogSection` components, removing the
+  duplicated header markup that was copied across six dialogs.
+
+---
+
 ## [2.9.0] — 2026-06-28
 
 ### ✨ Added

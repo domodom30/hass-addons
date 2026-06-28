@@ -26,8 +26,12 @@
     "title": "Bluetooth Audio",
     "subtitle": "Gérer les connexions des périphériques audio Bluetooth"
   },
-  "theme": { "toggle": "Changer de thème" },
-  "language": { "label": "Langue" },
+  "theme": {
+    "toggle": "Changer de thème"
+  },
+  "language": {
+    "label": "Langue"
+  },
   "menu": {
     "events": "Événements",
     "logs": "Journaux",
@@ -125,17 +129,23 @@
     "empty": "Aucune entrée de journal correspondante."
   },
   "settings": {
+    "sectionScan": "Recherche",
+    "sectionReconnect": "Reconnexion",
     "title": "Réglages de l'application",
     "scanDuration": "Durée de recherche (secondes)",
     "scanDurationHint": "Durée de recherche des périphériques audio Bluetooth détectables (5–60).",
     "autoReconnect": "Reconnexion automatique",
-    "autoReconnectHint": "Interrupteur principal de la reconnexion automatique. S'il est désactivé, aucun appareil ne se reconnecte ; le contrôle par appareil se trouve dans les réglages de chaque enceinte.",
+    "autoReconnectHint": "Switch principal de la reconnexion automatique. S'il est désactivé, aucun appareil ne se reconnecte.",
     "reconnectInterval": "Intervalle de reconnexion (secondes)",
     "reconnectIntervalHint": "Délai initial entre les tentatives de reconnexion (5–600).",
     "maxBackoff": "Délai de reconnexion maximal (secondes)",
     "maxBackoffHint": "Délai maximal entre les tentatives de reconnexion avec backoff exponentiel (60–3600)."
   },
   "deviceSettings": {
+    "sectionReconnect": "Reconnexion",
+    "sectionAudio": "Audio",
+    "sectionMpd": "Lecteur MPD",
+    "sectionMediaButtons": "Boutons multimédias",
     "title": "Réglages du périphérique",
     "audioProfile": "Profil audio",
     "a2dp": "A2DP (musique stéréo)",
@@ -195,5 +205,7 @@
     "message": "Oublier le périphérique {address} ? Cela le désappairera.",
     "confirm": "Oublier"
   },
-  "reconnect": { "message": "Reconnexion au serveur…" }
+  "reconnect": {
+    "message": "Reconnexion au serveur…"
+  }
 }

@@ -1,12 +1,13 @@
 {
   "name": "bt-audio-manager-frontend",
-  "version": "2.9.0",
+  "version": "3.0.0",
   "description": "Vue 3 + Vuetify frontend for the Home Assistant Bluetooth Audio Manager add-on",
   "type": "module",
   "private": true,
   "author": "Domodom30 <domodom30@gmail.com>",
   "scripts": {
     "dev": "vite --host",
+    "dev:mock": "vite --host --mode mock",
     "build": "vite build",
     "preview": "vite preview --host",
     "test": "vitest run",
@@ -33,6 +34,7 @@
     "sass": "^1.74.1",
     "vite": "^5.2.8",
     "vite-plugin-vuetify": "^2.0.3",
-    "vitest": "^1.4.0"
+    "vitest": "^1.4.0",
+    "ws": "^8.18.0"
   }
 }

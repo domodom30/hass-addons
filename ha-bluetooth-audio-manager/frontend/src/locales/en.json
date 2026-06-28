@@ -26,8 +26,12 @@
     "title": "Bluetooth Audio",
     "subtitle": "Manage Bluetooth audio device connections"
   },
-  "theme": { "toggle": "Toggle theme" },
-  "language": { "label": "Language" },
+  "theme": {
+    "toggle": "Toggle theme"
+  },
+  "language": {
+    "label": "Language"
+  },
   "menu": {
     "events": "Events",
     "logs": "Logs",
@@ -125,17 +129,23 @@
     "empty": "No matching log entries."
   },
   "settings": {
+    "sectionScan": "Scanning",
+    "sectionReconnect": "Reconnection",
     "title": "App Settings",
     "scanDuration": "Scan Duration (seconds)",
     "scanDurationHint": "How long to scan for discoverable Bluetooth audio devices (5–60).",
     "autoReconnect": "Auto Reconnect",
-    "autoReconnectHint": "Master switch for automatic reconnection. When off, no device reconnects; per-device control is in each device's settings.",
+    "autoReconnectHint": "Master switch for automatic reconnection. When off, no device reconnects.",
     "reconnectInterval": "Reconnect Interval (seconds)",
     "reconnectIntervalHint": "Initial delay between reconnection attempts (5–600).",
     "maxBackoff": "Max Reconnect Backoff (seconds)",
     "maxBackoffHint": "Maximum delay between reconnection attempts with exponential backoff (60–3600)."
   },
   "deviceSettings": {
+    "sectionReconnect": "Reconnection",
+    "sectionAudio": "Audio",
+    "sectionMpd": "MPD Player",
+    "sectionMediaButtons": "Media Buttons",
     "title": "Device Settings",
     "audioProfile": "Audio Profile",
     "a2dp": "A2DP (stereo music)",
@@ -195,5 +205,7 @@
     "message": "Forget device {address}? This will unpair it.",
     "confirm": "Forget"
   },
-  "reconnect": { "message": "Reconnecting to server…" }
+  "reconnect": {
+    "message": "Reconnecting to server…"
+  }
 }

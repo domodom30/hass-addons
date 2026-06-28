@@ -1,19 +1,17 @@
 <template>
   <v-dialog v-model="show" max-width="760" scrollable>
     <v-card>
-      <div class="d-flex align-center ga-3 px-5 py-3">
-        <v-avatar size="36" color="primary" variant="tonal">
-          <v-icon size="20">mdi-format-list-bulleted</v-icon>
-        </v-avatar>
-        <div class="text-subtitle-1 font-weight-bold flex-grow-1">
+      <DialogHeader icon="mdi-format-list-bulleted" @close="show = false">
+        <template #title>
           {{ $t("events.title") }}
           <v-chip size="x-small" class="ml-1" variant="tonal">{{ events.length }}</v-chip>
-        </div>
-        <v-btn variant="text" size="small" prepend-icon="mdi-delete-outline" @click="clear">
-          {{ $t("events.clear") }}
-        </v-btn>
-        <v-btn icon="mdi-close" variant="text" size="small" @click="show = false" />
-      </div>
+        </template>
+        <template #append>
+          <v-btn variant="text" size="small" prepend-icon="mdi-delete-outline" @click="clear">
+            {{ $t("events.clear") }}
+          </v-btn>
+        </template>
+      </DialogHeader>
       <v-divider />
       <v-card-text ref="log" class="events-log font-mono pa-3">
         <div v-if="events.length === 0" class="text-center text-medium-emphasis py-6">
@@ -43,8 +41,11 @@
 </template>
 
 <script>
+import DialogHeader from "@/components/base/DialogHeader.vue";
+
 export default {
   name: "EventsDialog",
+  components: { DialogHeader },
   computed: {
     show: {
       get() {
