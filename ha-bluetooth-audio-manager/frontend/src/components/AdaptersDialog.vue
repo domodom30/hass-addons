@@ -54,7 +54,7 @@
       <v-divider />
       <v-card-actions class="px-4 py-3">
         <v-spacer />
-        <v-btn variant="text" @click="show = false">{{ $t("common.close") }}</v-btn>
+        <v-btn color="error" variant="flat" @click="show = false">{{ $t("common.close") }}</v-btn>
       </v-card-actions>
     </v-card>
   </v-dialog>

@@ -5,6 +5,31 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [2.8.0] — 2026-06-28
+
+### ✨ Added
+
+- **Per-device auto-reconnect**: each speaker now has its own *Auto Reconnect*
+  toggle in its settings. The global *Auto Reconnect* setting acts as a master
+  switch (off ⇒ nothing reconnects); the reconnect interval and backoff remain
+  global. Disabling the toggle cancels any in-flight reconnection; enabling it
+  on a disconnected device starts reconnecting immediately. Existing devices
+  keep reconnecting (enabled by default).
+
+### 🎨 Changed
+
+- **Cancel / Close buttons** are now solid red buttons (matching the type of
+  the primary *Save* buttons) across the settings, device, adapters and
+  add-device dialogs.
+- **Typography**: bundled the self-hosted Roboto font and enabled font
+  smoothing for a sharper, consistent rendering.
+- **Logs viewer**: aligned columns into a clean table — the logger column has a
+  fixed width with ellipsis and the timestamp column no longer wastes space.
+- **Overflow menu**: each entry now has a distinct icon color for easier
+  scanning.
+
+---
+
 ## [2.7.0] — 2026-06-27
 
 ### ✨ Added

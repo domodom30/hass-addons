@@ -93,7 +93,7 @@
     "scanDuration": "Scan Duration (seconds)",
     "scanDurationHint": "How long to scan for discoverable Bluetooth audio devices (5–60).",
     "autoReconnect": "Auto Reconnect",
-    "autoReconnectHint": "Automatically reconnect to paired devices when they become available.",
+    "autoReconnectHint": "Master switch for automatic reconnection. When off, no device reconnects; per-device control is in each device's settings.",
     "reconnectInterval": "Reconnect Interval (seconds)",
     "reconnectIntervalHint": "Initial delay between reconnection attempts (5–600).",
     "maxBackoff": "Max Reconnect Backoff (seconds)",
@@ -133,7 +133,9 @@
     "none": "None",
     "mediaButtons": "Media Buttons (AVRCP)",
     "avrcpHelp": "Track playback state and accept media-button commands from the speaker. Media buttons may or may not work reliably depending on hardware.",
-    "avrcpUnsupported": "Device does not support AVRCP media buttons."
+    "avrcpUnsupported": "Device does not support AVRCP media buttons.",
+    "autoReconnect": "Auto Reconnect",
+    "autoReconnectHelp": "Automatically reconnect to this device on startup and after it drops. Requires the global Auto Reconnect master switch to be on."
   },
   "adapters": {
     "title": "Bluetooth Adapters",

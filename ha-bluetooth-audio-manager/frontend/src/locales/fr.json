@@ -93,7 +93,7 @@
     "scanDuration": "Durée de recherche (secondes)",
     "scanDurationHint": "Durée de recherche des périphériques audio Bluetooth détectables (5–60).",
     "autoReconnect": "Reconnexion automatique",
-    "autoReconnectHint": "Se reconnecter automatiquement aux périphériques appairés lorsqu'ils sont disponibles.",
+    "autoReconnectHint": "Interrupteur principal de la reconnexion automatique. S'il est désactivé, aucun appareil ne se reconnecte ; le contrôle par appareil se trouve dans les réglages de chaque enceinte.",
     "reconnectInterval": "Intervalle de reconnexion (secondes)",
     "reconnectIntervalHint": "Délai initial entre les tentatives de reconnexion (5–600).",
     "maxBackoff": "Délai de reconnexion maximal (secondes)",
@@ -133,7 +133,9 @@
     "none": "Aucun",
     "mediaButtons": "Boutons multimédias (AVRCP)",
     "avrcpHelp": "Suivre l'état de lecture et accepter les commandes des boutons multimédias de l'enceinte. Leur fiabilité dépend du matériel.",
-    "avrcpUnsupported": "Le périphérique ne prend pas en charge les boutons multimédias AVRCP."
+    "avrcpUnsupported": "Le périphérique ne prend pas en charge les boutons multimédias AVRCP.",
+    "autoReconnect": "Reconnexion automatique",
+    "autoReconnectHelp": "Reconnecter automatiquement cet appareil au démarrage et après une déconnexion. Nécessite que l'interrupteur principal « Reconnexion automatique » soit activé."
   },
   "adapters": {
     "title": "Adaptateurs Bluetooth",

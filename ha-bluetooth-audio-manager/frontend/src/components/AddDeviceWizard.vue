@@ -143,7 +143,7 @@
       <v-card-actions class="px-4 py-3">
         <v-btn v-if="step === 2" variant="text" @click="step = 1">{{ $t("common.back") }}</v-btn>
         <v-spacer />
-        <v-btn v-if="step === 1" variant="text" @click="close">{{ $t("common.cancel") }}</v-btn>
+        <v-btn v-if="step === 1" color="error" variant="flat" @click="close">{{ $t("common.cancel") }}</v-btn>
         <v-btn
           v-if="step === 1"
           color="primary"
@@ -153,7 +153,7 @@
         >
           {{ $t("common.continue") }}
         </v-btn>
-        <v-btn v-if="step === 3" color="primary" variant="flat" @click="close">
+        <v-btn v-if="step === 3" color="error" variant="flat" @click="close">
           {{ $t("common.close") }}
         </v-btn>
       </v-card-actions>

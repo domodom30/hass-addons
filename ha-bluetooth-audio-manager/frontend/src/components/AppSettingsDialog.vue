@@ -54,7 +54,7 @@
       </v-card-text>
       <v-divider />
       <v-card-actions class="px-4 py-3">
-        <v-btn variant="text" @click="show = false">{{
+        <v-btn color="error" variant="flat" @click="show = false">{{
           $t("common.cancel")
         }}</v-btn>
         <v-spacer />

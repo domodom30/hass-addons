@@ -78,33 +78,39 @@
           <v-list density="compact" min-width="220">
             <v-list-item @click="openOverlay('events')">
               <template #prepend>
-                <v-icon size="18" class="mr-3" color="primary">mdi-format-list-bulleted</v-icon>
+                <v-icon size="18" class="mr-3" color="indigo">mdi-format-list-bulleted</v-icon>
               </template>
               <v-list-item-title class="text-caption">{{ $t("menu.events") }}</v-list-item-title>
             </v-list-item>
+
             <v-list-item @click="openOverlay('logs')">
               <template #prepend>
-                <v-icon size="18" class="mr-3" color="primary">mdi-text-box-outline</v-icon>
+                <v-icon size="18" class="mr-3" color="teal">mdi-text-box-outline</v-icon>
               </template>
               <v-list-item-title class="text-caption">{{ $t("menu.logs") }}</v-list-item-title>
             </v-list-item>
+
             <v-divider class="my-1" />
+
             <v-list-item @click="openOverlay('appSettings')">
               <template #prepend>
-                <v-icon size="18" class="mr-3" color="primary">mdi-tune-variant</v-icon>
+                <v-icon size="18" class="mr-3" color="deep-purple">mdi-tune-variant</v-icon>
               </template>
               <v-list-item-title class="text-caption">{{ $t("menu.appSettings") }}</v-list-item-title>
             </v-list-item>
+
             <v-list-item @click="openAdapters">
               <template #prepend>
-                <v-icon size="18" class="mr-3" color="primary">mdi-chip</v-icon>
+                <v-icon size="18" class="mr-3" color="cyan-darken-2">mdi-chip</v-icon>
               </template>
               <v-list-item-title class="text-caption">{{ $t("menu.adapters") }}</v-list-item-title>
             </v-list-item>
+
             <v-divider class="my-1" />
+
             <v-list-item @click="restart">
               <template #prepend>
-                <v-icon size="18" class="mr-3" color="error">mdi-restart</v-icon>
+                <v-icon size="18" class="mr-3" color="red-darken-2">mdi-restart</v-icon>
               </template>
               <v-list-item-title class="text-caption">{{ $t("menu.restart") }}</v-list-item-title>
             </v-list-item>

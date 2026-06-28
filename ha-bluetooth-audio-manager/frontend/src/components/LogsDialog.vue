@@ -148,13 +148,19 @@ export default {
   padding: 1px 0;
 }
 .log-ts {
-  min-width: 92px;
+  white-space: nowrap;
+  flex: 0 0 auto;
 }
 .log-level {
-  min-width: 64px;
+  width: 64px;
+  flex: 0 0 64px;
   justify-content: center;
 }
 .log-logger {
-  min-width: 90px;
+  width: 120px;
+  flex: 0 0 120px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 </style>

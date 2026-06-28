@@ -1284,6 +1284,7 @@ class BluetoothAudioManager:
                 device["mpd_port"] = s.get("mpd_port")
                 device["mpd_hw_volume"] = s.get("mpd_hw_volume", 100)
                 device["avrcp_enabled"] = s.get("avrcp_enabled", True)
+                device["auto_connect"] = s.get("auto_connect", True)
 
         # Add stored devices not currently visible
         discovered_addresses = {d["address"] for d in discovered}
@@ -1312,6 +1313,7 @@ class BluetoothAudioManager:
                         "mpd_port": s.get("mpd_port"),
                         "mpd_hw_volume": s.get("mpd_hw_volume", 100),
                         "avrcp_enabled": s.get("avrcp_enabled", True),
+                        "auto_connect": s.get("auto_connect", True),
                     }
                 )
 
@@ -3174,6 +3176,16 @@ class BluetoothAudioManager:
                             if vol_info and vol_info[1] == "running":
                                 self.media_player.set_playback_status("Playing")
                                 logger.info("AVRCP enabled for %s — sink running, set PlaybackStatus=Playing", address)
+
+        # React to auto-reconnect toggle changes
+        if "auto_connect" in settings and self.reconnect_service:
+            if not device_info.get("auto_connect", True):
+                # Disabled — stop any in-flight backoff loop
+                self.reconnect_service.cancel_reconnect(address)
+            elif address not in self._device_connect_time:
+                # Enabled while disconnected — start reconnecting now instead
+                # of waiting for the next disconnect/restart
+                self.reconnect_service.handle_disconnect(address)
 
         await self._broadcast_devices()
         return device_info

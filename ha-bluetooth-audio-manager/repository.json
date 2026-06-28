@@ -1,5 +1,5 @@
 {
   "name": "Bluetooth Audio Manager for Home Assistant",
-  "url": "https://github.com/scyto/ha-bluetooth-audio-manager",
-  "maintainer": "scyto"
+  "url": "https://github.com/domodom30/hass-addons/tree/master/ha-bluetooth-audio-manager",
+  "maintainer": "domodom30"
 }

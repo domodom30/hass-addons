@@ -1,0 +1,15 @@
+FROM bt-audio-manager:dev
+
+# dbus-daemon is needed to start a minimal system bus so the app can connect
+# (the production image only ships dbus-libs, not the daemon)
+RUN apk add --no-cache dbus
+
+# Create dbus system bus config dir expected by dbus-daemon --system
+RUN mkdir -p /run/dbus
+
+# Replicate HA Supervisor directories (not present outside HAOS)
+RUN mkdir -p /config /data \
+    && echo '{"log_level":"info","mpd_password":""}' > /data/options.json
+
+# Bypass s6-overlay: start dbus-daemon first, then run the Python app directly
+ENTRYPOINT ["sh", "-c", "dbus-daemon --system --nofork --nopidfile & sleep 0.3 && exec python3 -m bt_audio_manager"]
