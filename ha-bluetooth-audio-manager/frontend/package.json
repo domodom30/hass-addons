@@ -1,6 +1,6 @@
 {
   "name": "bt-audio-manager-frontend",
-  "version": "2.7.0",
+  "version": "2.8.0",
   "description": "Vue 3 + Vuetify frontend for the Home Assistant Bluetooth Audio Manager add-on",
   "type": "module",
   "private": true,
@@ -14,6 +14,7 @@
     "lint": "eslint src --ext .vue,.js"
   },
   "dependencies": {
+    "@fontsource/roboto": "^5.2.10",
     "@mdi/font": "^7.4.47",
     "moment": "^2.30.1",
     "reconnecting-websocket": "^4.4.0",

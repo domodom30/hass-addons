@@ -23,6 +23,14 @@
       <v-divider />
 
       <v-card-text class="pa-5">
+        <v-switch
+          v-model="form.autoConnect"
+          :label="$t('deviceSettings.autoReconnect')"
+          :messages="$t('deviceSettings.autoReconnectHelp')"
+        />
+
+        <v-divider class="my-4" />
+
         <v-select
           v-if="hfpSwitching"
           v-model="form.audioProfile"
@@ -136,7 +144,7 @@
 
       <v-divider />
       <v-card-actions class="px-4 py-3">
-        <v-btn variant="text" @click="show = false">{{
+        <v-btn color="error" variant="flat" @click="show = false">{{
           $t("common.cancel")
         }}</v-btn>
         <v-spacer />
@@ -164,6 +172,7 @@ export default {
       saving: false,
       lowerUuids: [],
       form: {
+        autoConnect: true,
         audioProfile: "a2dp",
         idleMode: "default",
         kaMethod: "infrasound",
@@ -282,6 +291,7 @@ export default {
       const d = this.device || {};
       this.lowerUuids = (d.uuids || []).map((u) => u.toLowerCase());
       this.form = {
+        autoConnect: d.auto_connect ?? true,
         audioProfile: d.audio_profile || "a2dp",
         idleMode: d.idle_mode || "default",
         kaMethod: d.keep_alive_method || "infrasound",
@@ -297,6 +307,7 @@ export default {
       if (!this.device) return;
       this.saving = true;
       const settings = {
+        auto_connect: this.form.autoConnect,
         idle_mode: this.form.idleMode,
         keep_alive_method: this.form.kaMethod,
         power_save_delay: parseInt(this.form.powerSaveDelay, 10) || 0,

@@ -99,6 +99,22 @@ export default {
 </script>
 
 <style>
+html,
+body,
+.v-application {
+  font-family: "Roboto", -apple-system, BlinkMacSystemFont, "Segoe UI",
+    "Helvetica Neue", Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+.v-alert.text-warning,
+.v-alert.text-warning .v-alert__content {
+  font-size: 12px;
+  line-height: 1.4;
+}
+
 .page-container {
   max-width: 1280px;
   margin: 0 auto;

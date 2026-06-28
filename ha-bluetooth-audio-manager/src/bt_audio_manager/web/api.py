@@ -387,6 +387,7 @@ def create_api_routes(
                 "power_save_delay", "auto_disconnect_minutes",
                 "mpd_enabled", "mpd_port", "mpd_hw_volume",
                 "avrcp_enabled",
+                "auto_connect",
             }
             settings = {k: v for k, v in body.items() if k in allowed_keys}
             if not settings:
@@ -435,6 +436,11 @@ def create_api_routes(
                 if not isinstance(settings["avrcp_enabled"], bool):
                     return web.json_response(
                         {"error": "avrcp_enabled must be a boolean"}, status=400
+                    )
+            if "auto_connect" in settings:
+                if not isinstance(settings["auto_connect"], bool):
+                    return web.json_response(
+                        {"error": "auto_connect must be a boolean"}, status=400
                     )
             if "mpd_port" in settings:
                 port = settings["mpd_port"]
