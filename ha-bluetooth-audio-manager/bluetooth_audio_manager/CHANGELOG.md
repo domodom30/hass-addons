@@ -1,3 +1,14 @@
+## [3.1.0] — 2026-06-28
+
+### 🎨 Changed
+
+- **Signal indicator**: the RSSI icon now reflects signal strength with a
+  matching shape (full → empty bars) and colours all five quality levels —
+  *excellent/good* green, *fair* orange, *weak* deep orange and *very weak*
+  red — with a distinct greyed-out *stale* state.
+
+---
+
 ## [3.0.0] — 2026-06-28
 
 ### 🎨 Changed
