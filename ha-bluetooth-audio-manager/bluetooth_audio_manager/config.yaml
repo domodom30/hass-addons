@@ -1,5 +1,5 @@
 name: "Bluetooth Audio Manager"
-version: "3.0.0"
+version: "3.1.0"
 slug: bluetooth_audio_manager
 description: "Manage Bluetooth audio device connections (A2DP) with persistent pairing, auto-reconnect, and AppArmor security."
 url: "https://github.com/domodom30/hass-addons/tree/master/ha-bluetooth-audio-manager"
