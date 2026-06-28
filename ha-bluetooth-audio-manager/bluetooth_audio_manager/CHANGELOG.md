@@ -1,11 +1,4 @@
-# Changelog
-
-All notable changes to this add-on are documented here.
-Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
-
----
-
-## [2.8.0] — 2026-06-28
+## [2.9.0] — 2026-06-28
 
 ### ✨ Added
 
@@ -51,7 +44,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
-## [2.7.0] — 2026-06-27
+## [2.8.0] — 2026-06-27
 
 ### ✨ Added
 
@@ -70,7 +63,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
-## [2.5.0] — 2026-06-27
+## [2.7.9] — 2026-06-27
 
 ### ✨ Changed
 
@@ -95,7 +88,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
-## [2.0.0] — 2026
+## [2.7.8] — 2026
 
 ### ✨ Added
 
