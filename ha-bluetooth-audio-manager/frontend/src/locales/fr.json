@@ -171,6 +171,8 @@
     "mpdHelp": "Router la sortie audio MPD vers cette enceinte. Ajoutez l'intégration MPD de HA pour créer une entité media_player pour le TTS et la lecture multimédia.",
     "hwVolume": "Volume matériel (%)",
     "hwVolumeHelp": "Définit le volume matériel de l'enceinte au démarrage de MPD (1–100 %). MPD contrôle ensuite le volume perçu. Par défaut : 100 %.",
+    "volumeHardware": "Piloter le volume matériel de l'enceinte",
+    "volumeHardwareHelp": "Si activé, media_player.volume_set pilote le volume matériel réel de l'enceinte (AVRCP) au lieu du seul flux MPD. Note : le volume décroît plus vite (50 % ≈ 25 % perçu) car les deux couches atténuent.",
     "mpdPort": "Port MPD",
     "mpdPortHelp": "Port de l'instance MPD de cette enceinte (6600–6609). Attribué automatiquement à la première activation.",
     "usePort": "Utilisez le port {port} lors de l'ajout de l'intégration MPD de HA.",

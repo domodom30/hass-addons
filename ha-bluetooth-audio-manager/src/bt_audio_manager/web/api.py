@@ -404,6 +404,7 @@ def create_api_routes(
                 "idle_mode", "keep_alive_method",
                 "power_save_delay", "auto_disconnect_minutes",
                 "mpd_enabled", "mpd_port", "mpd_hw_volume",
+                "mpd_volume_hardware",
                 "avrcp_enabled",
                 "auto_connect",
             }
@@ -454,6 +455,11 @@ def create_api_routes(
                 if not isinstance(settings["avrcp_enabled"], bool):
                     return web.json_response(
                         {"error": "avrcp_enabled must be a boolean"}, status=400
+                    )
+            if "mpd_volume_hardware" in settings:
+                if not isinstance(settings["mpd_volume_hardware"], bool):
+                    return web.json_response(
+                        {"error": "mpd_volume_hardware must be a boolean"}, status=400
                     )
             if "auto_connect" in settings:
                 if not isinstance(settings["auto_connect"], bool):

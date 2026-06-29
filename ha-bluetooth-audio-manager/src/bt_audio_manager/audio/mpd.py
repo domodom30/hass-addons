@@ -12,6 +12,7 @@ import asyncio
 import logging
 import os
 import textwrap
+from collections.abc import Callable
 
 from mpd.asyncio import MPDClient
 
@@ -53,8 +54,19 @@ class MPDManager:
         self._connect_lock = asyncio.Lock()
         self._sink_name: str | None = None
         self._stderr_task: asyncio.Task | None = None
+        self._idle_task: asyncio.Task | None = None
+        self._volume_cb: Callable[[str, int], None] | None = None
 
     # -- Lifecycle --
+
+    def on_volume_change(self, callback: Callable[[str, int], None]) -> None:
+        """Register a callback fired when MPD's mixer volume changes.
+
+        Callback signature: ``callback(address: str, volume: int)`` where
+        ``volume`` is 0-100. Used to propagate ``media_player.volume_set``
+        (MPD ``setvol``) to the speaker's hardware/AVRCP volume.
+        """
+        self._volume_cb = callback
 
     async def start(self, sink_name: str) -> None:
         """Generate config, start MPD daemon, connect client.
@@ -71,6 +83,7 @@ class MPDManager:
         await self._start_daemon()
         await self._connect_client()
         self._running = True
+        self._idle_task = asyncio.create_task(self._watch_mixer())
         logger.info("MPD started for %s on port %d", self._address, self._port)
 
     async def stop(self) -> None:
@@ -80,6 +93,10 @@ class MPDManager:
         if self._stderr_task:
             self._stderr_task.cancel()
             self._stderr_task = None
+
+        if self._idle_task:
+            self._idle_task.cancel()
+            self._idle_task = None
 
         self._disconnect_client()
 
@@ -292,6 +309,42 @@ class MPDManager:
             logger.debug("MPD set_volume failed (port %d): %s", self._port, e)
             if self._is_connection_error(e):
                 self._disconnect_client()
+
+    async def _watch_mixer(self) -> None:
+        """Watch MPD's 'mixer' subsystem and report volume changes.
+
+        Lets ``media_player.volume_set`` (MPD ``setvol``) propagate to the
+        speaker's hardware/AVRCP volume when the per-device bridge is
+        enabled. python-mpd2's asyncio client multiplexes ``idle`` with
+        regular commands on the same connection, so ``status()`` below is
+        safe while idle is active. Survives client reconnects by re-entering
+        the outer loop.
+        """
+        while self._running:
+            try:
+                await self._ensure_connected()
+                if not self._client:
+                    await asyncio.sleep(1.0)
+                    continue
+                async for _changed in self._client.idle(["mixer"]):
+                    if not self._running:
+                        break
+                    status = await self._client.status()
+                    vol_str = status.get("volume")
+                    if vol_str is None:
+                        continue
+                    try:
+                        vol = int(vol_str)
+                    except (TypeError, ValueError):
+                        continue
+                    if vol >= 0 and self._volume_cb:
+                        self._volume_cb(self._address, vol)
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:
+                logger.debug("MPD mixer watch error (port %d): %s", self._port, e)
+                self._disconnect_client()
+                await asyncio.sleep(1.0)
 
     async def get_status(self) -> dict:
         """Return MPD status dict."""

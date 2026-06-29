@@ -1,3 +1,17 @@
+## [3.2.0] — 2026-06-29
+
+### ✨ Added
+
+- **MPD volume controls the speaker's hardware volume**: a new per-device
+  *Control speaker hardware volume* toggle (MPD section of device settings)
+  makes `media_player.volume_set` move the speaker's real volume (AVRCP
+  Absolute Volume) by bridging MPD mixer changes to the PulseAudio sink —
+  instead of only attenuating MPD's software stream. Off by default, so
+  existing setups keep MPD as the single software volume knob. Note: when on,
+  loudness tapers more steeply (≈ squared) because both layers attenuate.
+
+---
+
 ## [3.1.0] — 2026-06-28
 
 ### 🎨 Changed
