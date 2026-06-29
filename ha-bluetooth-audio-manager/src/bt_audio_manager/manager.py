@@ -2692,6 +2692,10 @@ class BluetoothAudioManager:
         entry = {"address": addr, "property": "Volume", "value": value, "ts": time.time()}
         self.recent_avrcp.append(entry)
         self.event_bus.emit("avrcp_event", entry)
+        # Push the new sink state to the UI immediately so the device-card
+        # volume slider tracks speaker-side (AVRCP) changes in real time,
+        # instead of waiting up to SINK_POLL_INTERVAL for the periodic poll.
+        self._fire_and_forget(self._broadcast_sinks())
         # Sync PA volume change to MPD so HA's media_player entity reflects
         # the speaker's actual volume (speaker buttons → AVRCP → PA → MPD).
         # Skip if volume hasn't changed (PA fires on every sink state change).

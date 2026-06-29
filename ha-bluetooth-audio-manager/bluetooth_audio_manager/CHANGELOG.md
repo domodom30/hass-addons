@@ -1,3 +1,15 @@
+## [3.3.4] — 2026-06-29
+
+### ✨ Improved
+
+- **Real-time volume slider on speaker-side changes**: when the volume is
+  changed on the speaker itself (AVRCP), the add-on UI device-card slider now
+  updates immediately instead of waiting up to 5 s for the periodic sink poll.
+  `_on_pa_volume_change` now broadcasts the new sink state to connected UIs
+  right away.
+
+---
+
 ## [3.3.3] — 2026-06-29
 
 ### 🐛 Fixed
