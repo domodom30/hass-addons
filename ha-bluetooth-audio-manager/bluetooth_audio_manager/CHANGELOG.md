@@ -1,3 +1,20 @@
+## [3.3.1] — 2026-06-29
+
+### 🐛 Fixed
+
+- **Volume alignment with other players on the same speaker**: when *Control
+  speaker hardware volume* is enabled, MPD now uses a `null` mixer and no
+  longer attenuates its software stream — `media_player.volume_set` drives only
+  the speaker's hardware/AVRCP volume. This removes the previous double
+  (software × hardware) attenuation, so the MPD `media_player` and another
+  player sharing the same Bluetooth speaker (e.g. an ESPHome voice-assistant
+  satellite) produce the same loudness for an equal `volume_level`. In this
+  mode the hardware level now persists across MPD's idle off/on cycling instead
+  of being reset on each restart. Toggling the setting regenerates the MPD
+  config and restarts the instance.
+
+---
+
 ## [3.3.0] — 2026-06-29
 
 ### ✨ Added

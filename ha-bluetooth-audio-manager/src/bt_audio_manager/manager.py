@@ -3062,6 +3062,9 @@ class BluetoothAudioManager:
             speaker_name=mpd_name,
             password=mpd_password,
             log_level=self.config.log_level,
+            volume_hardware=self.store.get_device_settings(address).get(
+                "mpd_volume_hardware", False
+            ),
         )
         mpd.on_volume_change(self._on_mpd_volume_change)
         try:
@@ -3081,29 +3084,47 @@ class BluetoothAudioManager:
     ) -> None:
         """Set hardware volume to configured level when no stream is active.
 
-        Makes MPD the single volume control — HA automations can then
-        reliably set volume via ``media_player.volume_set`` before TTS.
-        If a stream IS active (e.g. add-on restarted mid-playback), sync
-        MPD volume to the current hardware level instead.
+        Two modes:
+        - Software (default): make MPD the single software knob — set the
+          hardware to the configured level when idle so HA automations can
+          reliably set volume via ``media_player.volume_set`` before TTS.
+        - Hardware (``mpd_volume_hardware``): the sink/AVRCP volume is the
+          single knob; never overwrite it on (re)start, only mirror it into
+          MPD's null mixer so the HA entity stays in sync.
         """
         if not self.pulse:
             return
         try:
             settings = self.store.get_device_settings(address)
-            hw_vol = settings.get("mpd_hw_volume", 100)
             vol_state = await self.pulse.get_sink_volume(sink_name)
             if not vol_state:
                 return
             current_vol, state = vol_state
+            if settings.get("mpd_volume_hardware"):
+                # Hardware-volume mode: the sink (AVRCP) is the single volume
+                # knob and persists across MPD's idle off/on cycling, so we must
+                # never overwrite it on (re)start. Just mirror the current
+                # hardware level into MPD's null mixer so the HA entity reflects
+                # reality. Prime the dedup so this sync doesn't echo back to the
+                # sink via the on_volume_change bridge.
+                self._last_pa_volume[address] = current_vol
+                await mpd.set_volume(current_vol)
+                logger.info(
+                    "MPD volume synced to hardware %d%% for %s (hw-volume mode)",
+                    current_vol, address,
+                )
+                return
+            # Software mode (default): make MPD the single software knob — set
+            # hardware to the configured level when idle, or sync MPD to the
+            # hardware level if a stream is already active.
+            hw_vol = settings.get("mpd_hw_volume", 100)
             if state != "running":
-                # No active stream — safe to set hardware to configured level
                 await self.pulse.set_sink_volume(sink_name, hw_vol)
                 logger.info(
                     "Hardware volume set to %d%% for %s (was %d%%, state=%s)",
                     hw_vol, address, current_vol, state,
                 )
             else:
-                # Stream active — sync MPD to current hardware volume
                 await mpd.set_volume(current_vol)
                 logger.info(
                     "MPD initial volume synced to hardware: %d%% for %s",
@@ -3184,7 +3205,9 @@ class BluetoothAudioManager:
                         self._schedule_sink_suspend(address, sink_name, delay)
 
         # React to MPD changes
-        mpd_changed = {"mpd_enabled", "mpd_port", "mpd_hw_volume"}.intersection(settings)
+        mpd_changed = {
+            "mpd_enabled", "mpd_port", "mpd_hw_volume", "mpd_volume_hardware",
+        }.intersection(settings)
         if mpd_changed:
             if device_info.get("mpd_enabled", False):
                 # Restart to pick up config changes (port, name) — only if connected

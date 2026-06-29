@@ -172,7 +172,7 @@
     "hwVolume": "Hardware Volume (%)",
     "hwVolumeHelp": "Sets speaker hardware volume when MPD starts (1–100%). MPD then controls perceived loudness as a single volume knob. Default: 100%.",
     "volumeHardware": "Control speaker hardware volume",
-    "volumeHardwareHelp": "When on, media_player.volume_set drives the speaker's real hardware volume (AVRCP) instead of only MPD's stream. Note: loudness tapers more steeply (50% ≈ 25% perceived) because both layers attenuate.",
+    "volumeHardwareHelp": "When on, media_player.volume_set drives the speaker's real hardware volume (AVRCP) as the single volume control — MPD stops attenuating in software, so there is no double attenuation. Recommended when another player (e.g. a voice assistant) shares the same speaker, so equal volume levels sound equally loud.",
     "mpdPort": "MPD Port",
     "mpdPortHelp": "Port for this speaker's MPD instance (6600–6609). Auto-assigned on first enable.",
     "usePort": "Use port {port} when adding the HA MPD integration.",
