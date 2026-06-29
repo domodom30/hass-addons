@@ -1,6 +1,7 @@
 "use strict";
 
 import ReconnectingWebSocket from "reconnecting-websocket";
+import { t } from "../i18n";
 
 // REST commands + a push WebSocket for live events. The HA ingress serves the
 // UI under a dynamic prefix, so URLs are derived from location.pathname and
@@ -84,7 +85,7 @@ class Api {
         break;
       case "scan_finished":
         c("setScan", { scanning: false });
-        if (msg.error) c("setError", { message: `Scan failed: ${msg.error}` });
+        if (msg.error) c("setError", { message: t("notify.scanFailed", { error: msg.error }) });
         break;
       case "scan_state":
         c("setScan", { scanning: !!msg.scanning });
@@ -101,7 +102,9 @@ class Api {
         break;
       case "keepalive_changed":
         c("setNotice", {
-          message: `Keep-alive ${msg.enabled ? "started" : "stopped"} for ${msg.address}`,
+          message: msg.enabled
+            ? t("notify.keepaliveStarted", { address: msg.address })
+            : t("notify.keepaliveStopped", { address: msg.address }),
         });
         break;
       case "settings_changed":

@@ -12,13 +12,25 @@ function getBrowserLocale() {
   return supported.includes(lang) ? lang : "en";
 }
 
-export function createI18n() {
+function getInitialLocale() {
   let saved = null;
   try {
     saved = localStorage.getItem(STORAGE_KEY);
   } catch {
     // localStorage inaccessible
   }
-  const locale = saved || getBrowserLocale();
-  return _createI18n({ legacy: true, locale, fallbackLocale: "en", messages });
+  return saved || getBrowserLocale();
 }
+
+// Shared singleton so non-component modules (store, api) can translate via the
+// same instance that the app uses — locale changes made in components are
+// reflected everywhere.
+export const i18n = _createI18n({
+  legacy: true,
+  locale: getInitialLocale(),
+  fallbackLocale: "en",
+  messages,
+});
+
+// Translation helper for use outside Vue components (store actions, api).
+export const t = (key, params) => i18n.global.t(key, params);

@@ -209,5 +209,28 @@
   },
   "reconnect": {
     "message": "Reconnexion au serveur…"
+  },
+  "notify": {
+    "scanFailed": "Échec du scan : {error}",
+    "pairedNoProfiles": "Appairé, mais aucun profil audio trouvé — cet appareil ne prend peut-être pas en charge la lecture audio.",
+    "pairFailed": "Échec de l'appairage : {error}",
+    "connectFailed": "Échec de la connexion : {error}",
+    "disconnectFailed": "Échec de la déconnexion : {error}",
+    "forceReconnectFailed": "Échec de la reconnexion forcée : {error}",
+    "forgetFailed": "Échec de l'oubli : {error}",
+    "volumeFailed": "Échec du changement de volume : {error}",
+    "muteFailed": "Échec du changement de sourdine : {error}",
+    "adapterCleanSwitch": "Nettoyage des appareils et passage à {label}…",
+    "adapterSwitch": "Passage à l'adaptateur {label}…",
+    "adapterRestart": "Redémarrage de l'application avec le nouvel adaptateur…",
+    "adapterSwitchFailed": "Échec du changement d'adaptateur : {error}",
+    "settingsSaved": "Paramètres enregistrés",
+    "settingsSaveFailed": "Échec de l'enregistrement des paramètres : {error}",
+    "deviceSettingsSavedMpd": "Paramètres enregistrés — MPD sur le port {port}",
+    "deviceSettingsSaved": "Paramètres de l'appareil enregistrés",
+    "deviceRenamed": "Appareil renommé",
+    "renameFailed": "Échec du renommage : {error}",
+    "keepaliveStarted": "Maintien de connexion activé pour {address}",
+    "keepaliveStopped": "Maintien de connexion désactivé pour {address}"
   }
 }

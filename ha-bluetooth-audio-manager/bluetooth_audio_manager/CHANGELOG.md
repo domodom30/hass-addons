@@ -1,3 +1,15 @@
+## [3.3.0] — 2026-06-29
+
+### ✨ Added
+
+- **Localised notification messages**: the toast, error and status messages
+  produced by the UI (pairing, connection, adapter switch, settings saved,
+  rename, keep-alive, etc.) now go through the existing vue-i18n system and are
+  shown in the selected language (English / French) instead of being
+  hard-coded in English. Messages forwarded from the backend are unchanged.
+
+---
+
 ## [3.2.1] — 2026-06-29
 
 ### 🐛 Fixed

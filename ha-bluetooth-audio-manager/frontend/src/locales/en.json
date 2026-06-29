@@ -209,5 +209,28 @@
   },
   "reconnect": {
     "message": "Reconnecting to server…"
+  },
+  "notify": {
+    "scanFailed": "Scan failed: {error}",
+    "pairedNoProfiles": "Paired, but no audio profiles found — this device may not support audio playback.",
+    "pairFailed": "Pairing failed: {error}",
+    "connectFailed": "Connection failed: {error}",
+    "disconnectFailed": "Disconnect failed: {error}",
+    "forceReconnectFailed": "Force reconnect failed: {error}",
+    "forgetFailed": "Forget failed: {error}",
+    "volumeFailed": "Volume change failed: {error}",
+    "muteFailed": "Mute change failed: {error}",
+    "adapterCleanSwitch": "Cleaning devices and switching to {label}...",
+    "adapterSwitch": "Switching to adapter {label}...",
+    "adapterRestart": "Restarting app with new adapter...",
+    "adapterSwitchFailed": "Adapter switch failed: {error}",
+    "settingsSaved": "Settings saved",
+    "settingsSaveFailed": "Failed to save settings: {error}",
+    "deviceSettingsSavedMpd": "Settings saved — MPD on port {port}",
+    "deviceSettingsSaved": "Device settings saved",
+    "deviceRenamed": "Device renamed",
+    "renameFailed": "Rename failed: {error}",
+    "keepaliveStarted": "Keep-alive started for {address}",
+    "keepaliveStopped": "Keep-alive stopped for {address}"
   }
 }
