@@ -116,6 +116,18 @@
               </div>
             </div>
             <div>
+              <v-switch
+                v-model="form.mpdVolumeHardware"
+                :label="$t('deviceSettings.volumeHardware')"
+                color="primary"
+                density="comfortable"
+                hide-details
+              />
+              <div class="text-caption font-italic text-medium-emphasis px-1">
+                {{ $t("deviceSettings.volumeHardwareHelp") }}
+              </div>
+            </div>
+            <div>
               <v-text-field
                 v-model.number="form.mpdPort"
                 type="number"
@@ -205,6 +217,7 @@ export default {
         autoDisconnectMinutes: 30,
         mpdEnabled: false,
         mpdHwVolume: 100,
+        mpdVolumeHardware: false,
         mpdPort: "",
         avrcpEnabled: true,
       },
@@ -324,6 +337,7 @@ export default {
         autoDisconnectMinutes: d.auto_disconnect_minutes ?? 30,
         mpdEnabled: d.mpd_enabled || false,
         mpdHwVolume: d.mpd_hw_volume ?? 100,
+        mpdVolumeHardware: d.mpd_volume_hardware ?? false,
         mpdPort: d.mpd_port || "",
         avrcpEnabled: this.hasAvrcpCap ? (d.avrcp_enabled ?? true) : false,
       };
@@ -342,6 +356,7 @@ export default {
       };
       if (settings.mpd_enabled) {
         settings.mpd_hw_volume = parseInt(this.form.mpdHwVolume, 10) || 100;
+        settings.mpd_volume_hardware = this.form.mpdVolumeHardware;
         if (this.form.mpdPort)
           settings.mpd_port = parseInt(this.form.mpdPort, 10);
       }

@@ -171,6 +171,8 @@
     "mpdHelp": "Route MPD audio output to this speaker. Add the HA MPD integration to create a media_player entity for TTS and media playback.",
     "hwVolume": "Hardware Volume (%)",
     "hwVolumeHelp": "Sets speaker hardware volume when MPD starts (1–100%). MPD then controls perceived loudness as a single volume knob. Default: 100%.",
+    "volumeHardware": "Control speaker hardware volume",
+    "volumeHardwareHelp": "When on, media_player.volume_set drives the speaker's real hardware volume (AVRCP) instead of only MPD's stream. Note: loudness tapers more steeply (50% ≈ 25% perceived) because both layers attenuate.",
     "mpdPort": "MPD Port",
     "mpdPortHelp": "Port for this speaker's MPD instance (6600–6609). Auto-assigned on first enable.",
     "usePort": "Use port {port} when adding the HA MPD integration.",

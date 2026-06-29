@@ -27,6 +27,7 @@ DEFAULT_DEVICE_SETTINGS = {
     "mpd_enabled": False,
     "mpd_port": None,   # Auto-assigned from pool (6600-6609); user can override
     "mpd_hw_volume": 100,  # Hardware volume % set when MPD starts (1-100)
+    "mpd_volume_hardware": False,  # True = media_player.volume_set drives hardware (AVRCP) via the sink
     "avrcp_enabled": True,  # Auto-track PlaybackStatus; False = always Stopped
     "auto_connect": True,  # Per-device auto-reconnect (startup + post-disconnect)
 }

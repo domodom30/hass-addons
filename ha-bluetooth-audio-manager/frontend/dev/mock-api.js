@@ -70,6 +70,7 @@ const DEVICES = [
     idle_mode: "power_save",
     mpd_enabled: true,
     mpd_port: 6601,
+    mpd_volume_hardware: false,
     bearers: ["BR/EDR"],
     uuids: [A2DP_SINK],
   },

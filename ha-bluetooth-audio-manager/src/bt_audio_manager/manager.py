@@ -2699,6 +2699,21 @@ class BluetoothAudioManager:
                 self._last_pa_volume[addr] = volume
                 self._fire_and_forget(mpd.set_volume(volume))
 
+    def _on_mpd_volume_change(self, address: str, volume: int) -> None:
+        """Handle an MPD mixer volume change (media_player.volume_set → setvol).
+
+        When the per-device bridge is enabled, propagate MPD's volume to the
+        PulseAudio sink so it reaches the speaker's hardware/AVRCP volume.
+        Shares the ``_last_pa_volume`` dedup with ``_on_pa_volume_change`` to
+        break the MPD↔sink feedback loop in both directions.
+        """
+        if not self.store.get_device_settings(address).get("mpd_volume_hardware"):
+            return
+        if self._last_pa_volume.get(address) == volume:
+            return
+        self._last_pa_volume[address] = volume
+        self._fire_and_forget(self.set_device_volume(address, volume))
+
     @staticmethod
     def _addr_from_sink_name(sink_name: str) -> str:
         """Extract BT address from sink name like 'bluez_sink.XX_XX_XX_XX_XX_XX.a2dp_sink'."""
@@ -3046,6 +3061,7 @@ class BluetoothAudioManager:
             password=mpd_password,
             log_level=self.config.log_level,
         )
+        mpd.on_volume_change(self._on_mpd_volume_change)
         try:
             await mpd.start(sink_name)
             self._mpd_instances[address] = mpd
