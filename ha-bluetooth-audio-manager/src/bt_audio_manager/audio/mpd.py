@@ -139,9 +139,10 @@ class MPDManager:
             {password_line}
 
             audio_output {{
-                type    "pulse"
-                name    "{speaker_name}"
-                sink    "{sink}"
+                type        "pulse"
+                name        "{speaker_name}"
+                sink        "{sink}"
+                mixer_type  "software"
             }}
 
             input {{

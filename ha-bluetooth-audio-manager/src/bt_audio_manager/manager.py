@@ -1291,6 +1291,7 @@ class BluetoothAudioManager:
                 device["mpd_enabled"] = s.get("mpd_enabled", False)
                 device["mpd_port"] = s.get("mpd_port")
                 device["mpd_hw_volume"] = s.get("mpd_hw_volume", 100)
+                device["mpd_volume_hardware"] = s.get("mpd_volume_hardware", False)
                 device["avrcp_enabled"] = s.get("avrcp_enabled", True)
                 device["auto_connect"] = s.get("auto_connect", True)
 
@@ -1320,6 +1321,7 @@ class BluetoothAudioManager:
                         "mpd_enabled": s.get("mpd_enabled", False),
                         "mpd_port": s.get("mpd_port"),
                         "mpd_hw_volume": s.get("mpd_hw_volume", 100),
+                        "mpd_volume_hardware": s.get("mpd_volume_hardware", False),
                         "avrcp_enabled": s.get("avrcp_enabled", True),
                         "auto_connect": s.get("auto_connect", True),
                         "battery": None,
