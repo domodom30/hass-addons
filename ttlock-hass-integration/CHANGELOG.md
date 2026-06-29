@@ -5,6 +5,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [2.5.8] — 2026-06-29
+
+### 🐛 Fixed
+
+- **BLE — contention sur le login admin** : `Lock.fromTTLock()` (chemin de diffusion de statut, exécuté à chaque `WsApi.sendLockStatus` / `getLocks`) émettait une commande BLE `getLockSound()` / `getAutolockTime()` non sérialisée, hors du mutex radio global. Cette commande entrait en collision avec la boucle `macro_adminLogin`, provoquant des `No response to checkAdmin` et `No response to get audioManage`. `_resolveAudio()` et `_resolveAutoLockTime()` sont désormais strictement *cache-only* (lecture de `_cachedAudio` / `_cachedAutoLock`, alimentés par les flux mutex-gardés `getAudio` / setAudio / calibrate), respectant le contrat « non-BLE » déjà documenté dans `fromTTLock`
+- **Version** : `addon/package.json` (resté à `2.5.1`) réaligné sur la version de release — le banner de démarrage affichait une version erronée
+
+---
+
 ## [2.5.7] — 2026-06-27
 
 ### 🎨 UI / UX
