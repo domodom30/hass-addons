@@ -454,6 +454,15 @@ class BluetoothAudioManager:
             addr = device_info["address"]
             try:
                 device = await self._get_or_create_device(addr)
+                # Reconcile BlueZ Trusted with the stored auto_connect flag.
+                # Devices paired before this reconciliation existed may be
+                # Trusted=true with auto_connect=false, letting bluetoothd
+                # reconnect them despite the user's setting.
+                want_trust = device_info.get("auto_connect", True)
+                try:
+                    await device.set_trusted(want_trust)
+                except Exception as e:
+                    logger.debug("Could not reconcile Trusted for %s: %s", addr, e)
                 if await device.is_connected():
                     logger.info("Device %s already connected at startup", addr)
                     self._last_signaled_volume.pop(addr, None)
@@ -1863,6 +1872,19 @@ class BluetoothAudioManager:
                 logger.debug("Skipping auto setup for %s (connect/cycle in progress)", address)
                 return
 
+            # Unsolicited connect (we didn't initiate it) for a device whose
+            # auto_connect is disabled — our BlueZ agent auto-authorizes every
+            # incoming service, so bluetoothd can reconnect a non-trusted device
+            # anyway. Enforce the user's setting by dropping the connection.
+            dev_info = self.store.get_device(address)
+            if dev_info and not dev_info.get("auto_connect", True):
+                logger.info(
+                    "Unsolicited connect from %s (auto_connect=false) — disconnecting",
+                    address,
+                )
+                await self.disconnect_device(address)
+                return
+
             # AVRCP watch and HFP disconnect are slow (retries, D-Bus
             # round-trips) but don't touch idle/MPD state, so run them
             # outside the lock to avoid blocking disconnect handlers.
@@ -3256,14 +3278,26 @@ class BluetoothAudioManager:
                                 logger.info("AVRCP enabled for %s — sink running, set PlaybackStatus=Playing", address)
 
         # React to auto-reconnect toggle changes
-        if "auto_connect" in settings and self.reconnect_service:
-            if not device_info.get("auto_connect", True):
-                # Disabled — stop any in-flight backoff loop
-                self.reconnect_service.cancel_reconnect(address)
-            elif address not in self._device_connect_time:
-                # Enabled while disconnected — start reconnecting now instead
-                # of waiting for the next disconnect/restart
-                self.reconnect_service.handle_disconnect(address)
+        if "auto_connect" in settings:
+            want = device_info.get("auto_connect", True)
+            # Sync the BlueZ Trusted property — a Trusted device is
+            # auto-reconnected by bluetoothd itself when it powers back on,
+            # independently of our ReconnectService. Without this, disabling
+            # auto_connect only stops the app-side loop while BlueZ keeps
+            # reconnecting the device on its own.
+            try:
+                device = await self._get_or_create_device(address)
+                await device.set_trusted(want)
+            except Exception as e:
+                logger.warning("Could not sync Trusted for %s: %s", address, e)
+            if self.reconnect_service:
+                if not want:
+                    # Disabled — stop any in-flight backoff loop
+                    self.reconnect_service.cancel_reconnect(address)
+                elif address not in self._device_connect_time:
+                    # Enabled while disconnected — start reconnecting now instead
+                    # of waiting for the next disconnect/restart
+                    self.reconnect_service.handle_disconnect(address)
 
         await self._broadcast_devices()
         return device_info

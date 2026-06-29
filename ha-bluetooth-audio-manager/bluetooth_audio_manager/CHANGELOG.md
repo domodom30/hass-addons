@@ -1,3 +1,19 @@
+## [3.3.5] — 2026-06-29
+
+### 🐛 Fixed
+
+- **Auto-reconnect toggle now actually stops reconnection**: disabling
+  auto-reconnect for a device only stopped the app-side loop while BlueZ kept
+  reconnecting the device on its own (the device stayed `Trusted`). The toggle
+  now syncs the BlueZ `Trusted` property, the stored state is reconciled on
+  startup, and an unsolicited incoming connection for a device with
+  auto_connect disabled is dropped (our pairing agent auto-authorizes every
+  incoming service, so a non-trusted device could still be reconnected by
+  bluetoothd). Fixes devices such as the Philips TAH1108 reconnecting on
+  power-on despite auto-reconnect being off.
+
+---
+
 ## [3.3.4] — 2026-06-29
 
 ### ✨ Improved
