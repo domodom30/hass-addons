@@ -33,11 +33,19 @@ class MPDManager:
         speaker_name: str,
         password: str | None = None,
         log_level: str = "info",
+        volume_hardware: bool = False,
     ) -> None:
         self._address = address
         self._port = port
         self._speaker_name = speaker_name
         self._password = password
+        # When True, drive the speaker's real hardware/AVRCP volume: MPD uses a
+        # "hardware" mixer (setvol == the PulseAudio sink volume) and keeps the
+        # output open (always_on) so setvol works even while idle — otherwise a
+        # closed output makes setvol fail with "All outputs are disabled". When
+        # False, MPD uses a "software" mixer (attenuates its own stream, always
+        # idle-safe) and leaves the sink/AVRCP level untouched.
+        self._volume_hardware = volume_hardware
         # Map app log level to MPD log level:
         # debug → "verbose" (full client/command chatter)
         # anything else → "default" (errors/warnings only)
@@ -142,7 +150,7 @@ class MPDManager:
                 type        "pulse"
                 name        "{speaker_name}"
                 sink        "{sink}"
-                mixer_type  "hardware"
+                mixer_type  "{mixer_type}"{always_on_line}
             }}
 
             input {{
@@ -156,6 +164,10 @@ class MPDManager:
             speaker_name=self._speaker_name.replace("\\", "\\\\").replace('"', '\\"'),
             sink=self._sink_name.replace("\\", "\\\\").replace('"', '\\"'),
             mpd_log_level=self._mpd_log_level,
+            mixer_type="hardware" if self._volume_hardware else "software",
+            # always_on keeps the output (and its hardware mixer) open so setvol
+            # never fails with "All outputs are disabled" while idle.
+            always_on_line='\n    always_on   "yes"' if self._volume_hardware else "",
         )
 
         with open(self._conf_path, "w") as f:

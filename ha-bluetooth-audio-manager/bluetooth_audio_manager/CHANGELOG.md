@@ -1,3 +1,22 @@
+## [3.3.3] — 2026-06-29
+
+### 🐛 Fixed
+
+- **Volume at idle no longer fails with "All outputs are disabled"**: the
+  hardware mixer restored in 3.3.2 broke `setvol` while MPD was idle (closed
+  output). The mixer type is now per-device again, controlled by the *Control
+  speaker hardware volume* toggle:
+  - **Off (default)** — `software` mixer: `setvol` always works (idle-safe),
+    MPD attenuates its own stream.
+  - **On** — `hardware` mixer + `always_on`: `media_player.volume_set` (incl.
+    Music Assistant) drives the speaker's real hardware/AVRCP volume,
+    bidirectionally, and keeps working while idle because the output stays
+    open. Power-save (sink suspend / auto-disconnect) is automatically disabled
+    for the device in this mode, since `always_on` keeps the stream open — use
+    it for always-powered speakers.
+
+---
+
 ## [3.3.2] — 2026-06-29
 
 ### 🐛 Fixed
