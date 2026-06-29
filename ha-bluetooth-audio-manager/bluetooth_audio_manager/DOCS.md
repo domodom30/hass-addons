@@ -1,31 +1,40 @@
-# Bluetooth Audio Manager
+# 🔊 Bluetooth Audio Manager
 
 Manage Bluetooth audio device connections (A2DP speakers and receivers) with
 persistent pairing, automatic reconnection, and a web-based management UI.
 
-## How it works
+> 💡 **In a nutshell:** pair a Bluetooth speaker once, and it shows up as a
+> PulseAudio sink (and optionally a Home Assistant `media_player`) for TTS,
+> media playback, and automations — with auto-reconnect handling the rest.
+
+---
+
+## 🔍 How it works
 
 This add-on uses BlueZ (the Linux Bluetooth stack) via D-Bus to discover,
 pair, and connect Bluetooth audio devices. Once connected, the device appears
 as a PulseAudio sink that Home Assistant's audio system can use for TTS,
 media playback, and automations.
 
-**Key features:**
+### ✨ Key features
 
-- Discover nearby Bluetooth audio devices via the **Add Device** tile
-- Pair and connect with one click from the web UI
-- Auto-reconnect when devices disconnect or after reboots (exponential backoff)
-- Four per-device idle modes: Default, Power Save, Stay Awake, Auto-Disconnect
-- Per-device MPD instances for HA `media_player` integration and volume control
-- Per-device AVRCP / Media Buttons toggle
-- Bluetooth adapter selection (multiple USB dongles)
-- Real-time Events view (MPRIS commands, AVRCP events, Transport volume)
-- Live Logs view with level filtering and regex search
-- WebSocket-based real-time updates with connection status indicator
-- Dark mode (automatic system theme detection)
-- Custom AppArmor security profile (principle of least privilege)
+- 📡 Discover nearby Bluetooth audio devices via the **Add Device** tile
+- 🖱️ Pair and connect with one click from the web UI
+- 🔄 Auto-reconnect when devices disconnect or after reboots (exponential backoff)
+- 💤 Four per-device idle modes: Default, Power Save, Stay Awake, Auto-Disconnect
+- 🎵 Per-device MPD instances for HA `media_player` integration and volume control
+- ⏯️ Per-device AVRCP / Media Buttons toggle
+- 🔌 Bluetooth adapter selection (multiple USB dongles)
+- 📊 Real-time Events view (MPRIS commands, AVRCP events, Transport volume)
+- 📜 Live Logs view with level filtering and regex search
+- ⚡ WebSocket-based real-time updates with connection status indicator
+- 🌍 Multilingual UI (English / French) with automatic browser-language detection
+- 🌗 Dark mode (automatic system theme detection)
+- 🛡️ Custom AppArmor security profile (principle of least privilege)
 
-## Coexistence with Home Assistant Bluetooth
+---
+
+## 🤝 Coexistence with Home Assistant Bluetooth
 
 This add-on is designed to coexist safely with Home Assistant's built-in
 Bluetooth integration (used for BLE sensors, beacons, etc.):
@@ -37,21 +46,35 @@ Bluetooth integration (used for BLE sensors, beacons, etc.):
   never affect HA's scanning
 - The adapter's power, discoverable, and pairable states are never modified
 
-## The web UI
+> ℹ️ **Best practice:** for the smoothest experience, dedicate a separate USB
+> Bluetooth adapter to this add-on and leave HA's onboard adapter for BLE (see
+> the **Bluetooth Adapters** section below).
 
-### Header
+---
 
-The header bar contains:
+## 🖥️ The web UI
 
-- **Build info pill** — shows the version string (e.g. `1.5.0` for stable
-  builds, or `sha-4f99686` for dev)
-- **Views** dropdown — switch between **Events** and **Logs** views
-- **Settings** dropdown — open **App Settings** or **Bluetooth Adapters**
-- **Connection status** badge — shows the WebSocket state: *Connected*,
-  *Connecting*, *Reconnecting*, or *Disconnected*
-- **Refresh** button — manually refresh the device list
+### 🧭 Header
 
-### Devices view (default)
+The top bar contains, from left to right:
+
+- **App identity** — the Bluetooth icon and the **Bluetooth Audio** title link
+  back to the dashboard
+- **Version badge** — the running version (e.g. `v3.3.0`), next to a **GitHub**
+  link to the project repository
+- **Device counters** (center, shown when devices exist) — total speaker count
+  and a color-coded *connected / total* indicator
+- 🌗 **Theme toggle** — switch between light and dark mode
+- 🌍 **Language menu** — pick the UI language (English / Français); a checkmark
+  marks the active one
+- **⋮ Menu** — opens **Events**, **Logs**, **App Settings**, **Bluetooth
+  Adapters**, and **Restart Add-on**
+
+> ℹ️ When the connection to the server drops (e.g. during an add-on restart),
+> a **Reconnecting…** banner appears with elapsed time and clears automatically
+> once the WebSocket is back.
+
+### 📱 Devices view (default)
 
 A responsive grid of device cards plus the **Add Device** tile.
 
@@ -62,18 +85,20 @@ Discovered devices appear incrementally as the scan progresses.
 **Device cards** show:
 
 - **Device name** and **MAC address**
-- **Status badge** — color-coded: green *Connected*, orange *Paired*,
-  gray *Discovered*
+- **Status badge** — color-coded: 🟢 green *Connected*, 🟠 orange *Paired*,
+  ⚪ gray *Discovered*
 - **Capability badges** (connected devices) — BR/EDR, A2DP, HFP, AVRCP
   with checkmarks (e.g. "A2DP ✓") for active profiles
 - **Signal strength** (connected devices) — RSSI in dBm with a color-coded
   signal icon. Colors indicate live vs stale readings:
-  - **Green** — excellent or good signal, actively updated
-  - **Yellow** — fair signal, actively updated
-  - **Red** — weak or very weak signal, actively updated (audio may stutter)
-  - **Grey** — last known signal from discovery time. The device is BR/EDR-only
-    (Classic Bluetooth) and cannot be measured while connected. Dual-mode
-    devices (BLE + BR/EDR) refresh automatically every 60 seconds.
+
+  | Color | Meaning |
+  | ----- | ------- |
+  | 🟢 **Green** | Excellent or good signal, actively updated |
+  | 🟡 **Yellow** | Fair signal, actively updated |
+  | 🔴 **Red** | Weak or very weak signal, actively updated (audio may stutter) |
+  | ⚪ **Grey** | Last known signal from discovery time. The device is BR/EDR-only (Classic Bluetooth) and cannot be measured while connected. Dual-mode devices (BLE + BR/EDR) refresh automatically every 60 seconds. |
+
 - **Audio sink info** (connected devices) — sample rate, channels, codec,
   volume percentage, and streaming state (Streaming / Idle / Suspended)
 - **Feature badges** — enabled per-device features: Power Save, Stay Awake,
@@ -83,7 +108,7 @@ Discovered devices appear incrementally as the scan progresses.
 - **Device menu** (**⋮**) — for paired/stored devices, contains:
   **Settings**, **Force Reconnect** (if connected), and **Forget Device**
 
-### Events view
+### 📡 Events view
 
 A real-time feed of media and volume events. Each entry shows a timestamp,
 a color-coded type label, the event content, and the device name.
@@ -99,7 +124,7 @@ Event types:
 
 The view keeps the most recent 100 events and has a **Clear** button.
 
-### Logs view
+### 📜 Logs view
 
 A live-streaming log viewer with:
 
@@ -112,9 +137,11 @@ A live-streaming log viewer with:
 Each log entry shows a timestamp (with millisecond precision), level, logger
 module name, and message.
 
-## Configuration
+---
 
-### Add-on configuration (HA Settings page)
+## ⚙️ Configuration
+
+### 🛠️ Add-on configuration (HA Settings page)
 
 These options are set on the add-on's **Configuration** tab in Home Assistant
 and require an add-on restart to take effect.
@@ -124,10 +151,10 @@ and require an add-on restart to take effect.
 | `log_level` | `info` | Logging verbosity: `debug`, `info`, `warning`, `error` |
 | `mpd_password` | *(empty)* | Optional password for all MPD instances. Leave empty for no auth. |
 
-### App Settings (in-app)
+### 🎛️ App Settings (in-app)
 
-Accessed via **Settings > App Settings** in the header. These take effect
-immediately — no restart needed.
+Accessed via **⋮ Menu > App Settings**. These take effect immediately — no
+restart needed.
 
 | Setting | Default | Range |
 | ------- | ------- | ----- |
@@ -143,13 +170,17 @@ immediately — no restart needed.
 - **Max Reconnect Backoff** — ceiling for the exponential backoff.
 - **Scan Duration** — how long the Add Device scan runs before stopping.
 
-## Device settings
+---
+
+## 🔧 Device settings
 
 Open a device's menu (**⋮**) and select **Settings** to configure per-device
-options. Settings are stored in `/config/paired_devices.json` (addon_config) and
-persist across restarts, HA backups, and add-on reinstalls.
+options.
 
-### When Idle
+> ℹ️ Settings are stored in `/config/paired_devices.json` (addon_config) and
+> persist across restarts, HA backups, and add-on reinstalls.
+
+### 💤 When Idle
 
 Controls what happens when audio playback stops on a connected device.
 
@@ -160,7 +191,7 @@ Controls what happens when audio playback stops on a connected device.
 | **Stay Awake** | Streams inaudible audio to prevent the speaker from auto-shutting down. Two methods: **Infrasound** (2 Hz sine wave — recommended; fools silence detection) or **Silence** (PCM zeros — lower CPU, but some speakers still detect this as silence). |
 | **Auto-Disconnect** | Fully disconnects the Bluetooth device after a configurable idle timeout: *5*, *15*, *30*, or *60 minutes*. The device will reconnect automatically if Auto Reconnect is enabled. |
 
-### MPD Media Player
+### 🎵 MPD Media Player
 
 Each connected speaker can optionally run its own MPD (Music Player Daemon)
 instance, exposing it as a `media_player` entity in Home Assistant. This lets
@@ -183,13 +214,12 @@ when MPD starts. MPD's software volume then acts as the single volume knob — s
 | **HA automation** `media_player.volume_set` | MPD software volume changes → effective output = that % |
 | **TTS with volume preset** | Automation sets volume then speaks → plays at that level |
 
-To add the speaker to HA: install the **MPD** integration and point it at
-the port shown in the device settings (e.g. port 6600). The hostname and
-password status are displayed in **Settings > App Settings** under
-"MPD Connection Info". Use that hostname when configuring the MPD integration
-in HA.
+> 💡 **Adding the speaker to HA:** install the **MPD** integration and point it
+> at the port shown in the device settings (e.g. port 6600). The hostname and
+> password status are shown in **App Settings** under "MPD Connection Info" —
+> use that hostname when configuring the MPD integration.
 
-### Media Buttons (AVRCP)
+### ⏯️ Media Buttons (AVRCP)
 
 Toggle to enable or disable AVRCP media button tracking per device.
 
@@ -199,11 +229,13 @@ Toggle to enable or disable AVRCP media button tracking per device.
 - **Disabled**: Always reports PlaybackStatus as "Stopped". Useful if AVRCP
   registration prevents the speaker from entering power-save mode.
 
-This toggle is greyed out for devices that do not advertise AVRCP UUIDs.
+> ℹ️ This toggle is greyed out for devices that do not advertise AVRCP UUIDs.
 
-## Bluetooth Adapters
+---
 
-Accessed via **Settings > Bluetooth Adapters** in the header.
+## 📶 Bluetooth Adapters
+
+Accessed via **⋮ Menu > Bluetooth Adapters**.
 
 Lists all Bluetooth adapters detected on the system. Each adapter shows:
 
@@ -213,18 +245,20 @@ Lists all Bluetooth adapters detected on the system. Each adapter shows:
 - Status badges: *Powered* / *Off*, *In Use*, *HA Bluetooth* (if managed by
   HA's Bluetooth integration), *HA BLE Scanning* (if active BLE scanning)
 
-**Recommendation:** Use a dedicated USB Bluetooth adapter that is **not**
-configured in Home Assistant's Bluetooth integration.
+> 💡 **Recommendation:** use a dedicated USB Bluetooth adapter that is **not**
+> configured in Home Assistant's Bluetooth integration.
 
-**Switching adapters:** Click **Select** on a different adapter. A confirmation
-dialog warns that all current device pairings will be cleared. The add-on
-restarts with the new adapter. The adapter selection is stored by MAC address
-so it survives reboots.
+> ⚠️ **Switching adapters:** clicking **Select** on a different adapter shows a
+> confirmation dialog warning that **all current device pairings will be
+> cleared**. The add-on restarts with the new adapter. The selection is stored
+> by MAC address so it survives reboots.
 
-## Usage
+---
+
+## 🚀 Usage
 
 1. Open the add-on from the Home Assistant sidebar (**BT Audio**)
-2. If you have multiple Bluetooth adapters, go to **Settings > Bluetooth
+2. If you have multiple Bluetooth adapters, go to **⋮ Menu > Bluetooth
    Adapters** and select the one to use
 3. Put your Bluetooth speaker in pairing mode
 4. Click the **Add Device** tile — a scan runs for the configured duration,
@@ -232,75 +266,79 @@ so it survives reboots.
 5. Discovered devices appear as cards. Click **Pair** on your device
 6. Once paired, click **Connect** — the device appears as a PulseAudio
    audio sink
-7. (Optional) Open the device menu (**⋮**) > **Settings** to configure idle
+7. *(Optional)* Open the device menu (**⋮**) > **Settings** to configure idle
    mode, MPD, or AVRCP
 8. Go to **Settings > System > Audio** in HA to see/select the Bluetooth
    speaker as the default output
 9. Use TTS, media player, or automations to play audio through it
 
-## Requirements
+---
+
+## 📋 Requirements
 
 - A Bluetooth adapter (built-in or USB dongle) accessible to HAOS
 - The Bluetooth adapter must be powered on (managed by HAOS, not this add-on)
 - The target device must support A2DP (Advanced Audio Distribution Profile)
 
-## Troubleshooting
+---
 
-**"Bluetooth adapter is not powered"**: Ensure your Bluetooth hardware is
-recognized by HAOS. Check Settings > System > Hardware.
+## 🩺 Troubleshooting
 
-**Device not appearing in scan**: Make sure the speaker is in pairing mode.
-Some devices exit pairing mode after 30–60 seconds.
+> **"Bluetooth adapter is not powered"** — Ensure your Bluetooth hardware is
+> recognized by HAOS. Check Settings > System > Hardware.
 
-**Connected but no audio**: Check Settings > System > Audio to verify the
-Bluetooth sink is listed. Try setting it as the default output.
+> **Device not appearing in scan** — Make sure the speaker is in pairing mode.
+> Some devices exit pairing mode after 30–60 seconds.
 
-**Speaker keeps disconnecting**: Open the device menu (**⋮**) > **Settings**
-and configure the **When Idle** mode. Try **Stay Awake** with the *Infrasound*
-method if *Silence* doesn't work.
+> **Connected but no audio** — Check Settings > System > Audio to verify the
+> Bluetooth sink is listed. Try setting it as the default output.
 
-**Zombie connection (connected but no audio or controls)**: Open the device
-menu (**⋮**) and select **Force Reconnect**. This performs a full
-disconnect/reconnect cycle to re-establish the audio link.
+> **Speaker keeps disconnecting** — Open the device menu (**⋮**) > **Settings**
+> and configure the **When Idle** mode. Try **Stay Awake** with the *Infrasound*
+> method if *Silence* doesn't work.
 
-**Speaker won't enter power-save with AVRCP enabled**: Some speakers refuse to
-sleep while an AVRCP media player is registered. Open the device menu (**⋮**) >
-**Settings** and disable **Media Buttons (AVRCP)**, or set the idle mode to
-**Power Save**.
+> **Zombie connection (connected but no audio or controls)** — Open the device
+> menu (**⋮**) and select **Force Reconnect**. This performs a full
+> disconnect/reconnect cycle to re-establish the audio link.
 
-**Device paired but "no audio profiles resolved" warning**: Some budget
-Bluetooth speakers only advertise their audio capabilities via Class of Device
-(CoD) and do not expose A2DP UUIDs until after pairing completes. Try
-connecting the device — audio profiles typically resolve after the first
-successful connection. If they don't, the device may not support A2DP.
+> **Speaker won't enter power-save with AVRCP enabled** — Some speakers refuse
+> to sleep while an AVRCP media player is registered. Open the device menu
+> (**⋮**) > **Settings** and disable **Media Buttons (AVRCP)**, or set the idle
+> mode to **Power Save**.
 
-**Multiple devices disconnected at once**: If several devices drop
-simultaneously, the add-on detects this as a Bluetooth adapter disruption and
-temporarily suppresses auto-reconnect to avoid hammering a potentially
-unstable adapter. Reconnection resumes automatically after the suppression
-window. Check the Logs view for "adapter disruption" messages.
+> **Device paired but "no audio profiles resolved" warning** — Some budget
+> Bluetooth speakers only advertise their audio capabilities via Class of Device
+> (CoD) and do not expose A2DP UUIDs until after pairing completes. Try
+> connecting the device — audio profiles typically resolve after the first
+> successful connection. If they don't, the device may not support A2DP.
 
-**Devices reappeared after reinstall with default settings**: After a fresh
-install or data wipe, the add-on automatically imports any devices that are
-still paired in BlueZ. These devices are restored with default settings
-(keep-alive off, MPD disabled). A toast notification confirms how many devices
-were restored. Reconfigure per-device settings as needed.
+> **Multiple devices disconnected at once** — If several devices drop
+> simultaneously, the add-on detects this as a Bluetooth adapter disruption and
+> temporarily suppresses auto-reconnect to avoid hammering a potentially
+> unstable adapter. Reconnection resumes automatically after the suppression
+> window. Check the Logs view for "adapter disruption" messages.
 
-**`br-connection-key-missing` error when connecting**: The pairing keys stored
-by BlueZ are out of sync with the speaker. Open the device menu (**⋮**) and
-select **Forget Device**, then clear the pairing on the speaker itself (usually
-hold the Bluetooth button for ~10 seconds until the speaker announces "ready to
-pair" or the LED enters pairing mode). Then scan and pair again.
+> **Devices reappeared after reinstall with default settings** — After a fresh
+> install or data wipe, the add-on automatically imports any devices that are
+> still paired in BlueZ. These devices are restored with default settings
+> (keep-alive off, MPD disabled). A toast notification confirms how many devices
+> were restored. Reconfigure per-device settings as needed.
 
-**`Authentication Rejected` when pairing**: The speaker still has old pairing
-keys for your system's Bluetooth address and is refusing the new pairing
-attempt. Clear the speaker's paired-device list (hold the Bluetooth button for
-~10 seconds) so both sides start fresh, then re-pair from the add-on.
+> **`br-connection-key-missing` error when connecting** — The pairing keys
+> stored by BlueZ are out of sync with the speaker. Open the device menu (**⋮**)
+> and select **Forget Device**, then clear the pairing on the speaker itself
+> (usually hold the Bluetooth button for ~10 seconds until the speaker announces
+> "ready to pair" or the LED enters pairing mode). Then scan and pair again.
 
-**WebSocket disconnected / Reconnecting banner**: The UI shows a
-"Reconnecting..." banner with elapsed time when the server connection is lost.
-This is expected during add-on restarts or network interruptions. The
-connection restores automatically with exponential backoff.
+> **`Authentication Rejected` when pairing** — The speaker still has old pairing
+> keys for your system's Bluetooth address and is refusing the new pairing
+> attempt. Clear the speaker's paired-device list (hold the Bluetooth button for
+> ~10 seconds) so both sides start fresh, then re-pair from the add-on.
 
-**Existing BLE integrations stopped working**: This should not happen by
-design. Check the add-on logs for errors and file an issue on GitHub.
+> **WebSocket disconnected / Reconnecting banner** — The UI shows a
+> "Reconnecting..." banner with elapsed time when the server connection is lost.
+> This is expected during add-on restarts or network interruptions. The
+> connection restores automatically with exponential backoff.
+
+> **Existing BLE integrations stopped working** — This should not happen by
+> design. Check the add-on logs for errors and file an issue on GitHub.
