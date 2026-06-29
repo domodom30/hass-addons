@@ -1,5 +1,6 @@
 import { createStore } from "vuex";
 import Api from "../api";
+import { t } from "../i18n";
 import { hasAvrcp } from "../profiles";
 import {
   DEVICE_STALE_MS,
@@ -256,48 +257,45 @@ const store = createStore({
         const r = await api.scan();
         if (r.scanning) commit("setScan", { scanning: true, duration: r.duration });
       } catch (e) {
-        commit("setError", { message: `Scan failed: ${e.message}` });
+        commit("setError", { message: t("notify.scanFailed", { error: e.message }) });
       }
     },
     async pair({ commit }, address) {
       try {
         const r = await api.pair(address);
         if (r && r.warning === "no_audio_profiles") {
-          commit("setNotice", {
-            message:
-              "Paired, but no audio profiles found — this device may not support audio playback.",
-          });
+          commit("setNotice", { message: t("notify.pairedNoProfiles") });
         }
       } catch (e) {
-        commit("setError", { message: `Pairing failed: ${e.message}` });
+        commit("setError", { message: t("notify.pairFailed", { error: e.message }) });
       }
     },
     async connect({ commit }, address) {
       try {
         await api.connectDevice(address);
       } catch (e) {
-        commit("setError", { message: `Connection failed: ${e.message}` });
+        commit("setError", { message: t("notify.connectFailed", { error: e.message }) });
       }
     },
     async disconnect({ commit }, address) {
       try {
         await api.disconnect(address);
       } catch (e) {
-        commit("setError", { message: `Disconnect failed: ${e.message}` });
+        commit("setError", { message: t("notify.disconnectFailed", { error: e.message }) });
       }
     },
     async forceReconnect({ commit }, address) {
       try {
         await api.forceReconnect(address);
       } catch (e) {
-        commit("setError", { message: `Force reconnect failed: ${e.message}` });
+        commit("setError", { message: t("notify.forceReconnectFailed", { error: e.message }) });
       }
     },
     async forget({ commit }, address) {
       try {
         await api.forget(address);
       } catch (e) {
-        commit("setError", { message: `Forget failed: ${e.message}` });
+        commit("setError", { message: t("notify.forgetFailed", { error: e.message }) });
       }
     },
     async setVolume({ commit }, { address, volume }) {
@@ -305,7 +303,7 @@ const store = createStore({
       try {
         await api.setVolume(address, volume);
       } catch (e) {
-        commit("setError", { message: `Volume change failed: ${e.message}` });
+        commit("setError", { message: t("notify.volumeFailed", { error: e.message }) });
       }
     },
     async setMute({ commit }, { address, mute }) {
@@ -313,33 +311,33 @@ const store = createStore({
       try {
         await api.setMute(address, mute);
       } catch (e) {
-        commit("setError", { message: `Mute change failed: ${e.message}` });
+        commit("setError", { message: t("notify.muteFailed", { error: e.message }) });
       }
     },
     async setAdapter({ commit }, { mac, label, clean }) {
       commit(
         "setStatus",
         clean
-          ? `Cleaning devices and switching to ${label}...`
-          : `Switching to adapter ${label}...`,
+          ? t("notify.adapterCleanSwitch", { label })
+          : t("notify.adapterSwitch", { label }),
       );
       try {
         const r = await api.setAdapter(mac, clean);
         if (r.restart_required) {
-          commit("setStatus", "Restarting app with new adapter...");
+          commit("setStatus", t("notify.adapterRestart"));
           api.restart().catch(() => {});
         }
       } catch (e) {
         commit("setStatus", null);
-        commit("setError", { message: `Adapter switch failed: ${e.message}` });
+        commit("setError", { message: t("notify.adapterSwitchFailed", { error: e.message }) });
       }
     },
     async saveSettings({ commit }, settings) {
       try {
         commit("setSettings", await api.saveSettings(settings));
-        commit("setNotice", { message: "Settings saved" });
+        commit("setNotice", { message: t("notify.settingsSaved") });
       } catch (e) {
-        commit("setError", { message: `Failed to save settings: ${e.message}` });
+        commit("setError", { message: t("notify.settingsSaveFailed", { error: e.message }) });
       }
     },
     async saveDeviceSettings({ commit }, { address, settings }) {
@@ -348,17 +346,17 @@ const store = createStore({
       commit("setNotice", {
         message:
           settings.mpd_enabled && port
-            ? `Settings saved — MPD on port ${port}`
-            : "Device settings saved",
+            ? t("notify.deviceSettingsSavedMpd", { port })
+            : t("notify.deviceSettingsSaved"),
       });
       return resp;
     },
     async renameDevice({ commit }, { address, name }) {
       try {
         await api.renameDevice(address, name);
-        commit("setNotice", { message: "Device renamed" });
+        commit("setNotice", { message: t("notify.deviceRenamed") });
       } catch (e) {
-        commit("setError", { message: `Rename failed: ${e.message}` });
+        commit("setError", { message: t("notify.renameFailed", { error: e.message }) });
       }
     },
     async restart() {
