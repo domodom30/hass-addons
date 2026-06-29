@@ -1,3 +1,16 @@
+## [3.2.1] — 2026-06-29
+
+### 🐛 Fixed
+
+- **Volume could not be set while idle**: `media_player.volume_set` no longer
+  fails with *“All outputs are disabled”*. MPD now uses a software (global)
+  mixer, so volume can be set even when nothing is playing — e.g. before a TTS
+  announcement.
+- **“Control speaker hardware volume” toggle** now persists its state in the UI
+  (the setting is included in the device payload sent to the frontend).
+
+---
+
 ## [3.2.0] — 2026-06-29
 
 ### ✨ Added
@@ -9,15 +22,6 @@
   instead of only attenuating MPD's software stream. Off by default, so
   existing setups keep MPD as the single software volume knob. Note: when on,
   loudness tapers more steeply (≈ squared) because both layers attenuate.
-
-### 🐛 Fixed
-
-- **Volume could not be set while idle**: `media_player.volume_set` no longer
-  fails with *“All outputs are disabled”*. MPD now uses a software (global)
-  mixer, so volume can be set even when nothing is playing — e.g. before a TTS
-  announcement.
-- **“Control speaker hardware volume” toggle** now persists its state in the UI
-  (the setting is included in the device payload sent to the frontend).
 
 ---
 
