@@ -2798,6 +2798,15 @@ class BluetoothAudioManager:
         # Apply idle mode behaviour
         if addr and self.store:
             settings = self.store.get_device_settings(addr)
+            if settings.get("mpd_volume_hardware"):
+                # Hardware-volume mode keeps MPD's output open (always_on) so the
+                # hardware mixer stays reachable for setvol; suspending or
+                # disconnecting the sink would defeat that, so skip power-save.
+                logger.info(
+                    "Sink idle for %s — power-save skipped (hardware-volume mode)",
+                    addr,
+                )
+                return
             mode = settings.get("idle_mode", "default")
             if mode == "power_save":
                 delay = settings.get("power_save_delay", 0)
@@ -3062,6 +3071,9 @@ class BluetoothAudioManager:
             speaker_name=mpd_name,
             password=mpd_password,
             log_level=self.config.log_level,
+            volume_hardware=self.store.get_device_settings(address).get(
+                "mpd_volume_hardware", False
+            ),
         )
         mpd.on_volume_change(self._on_mpd_volume_change)
         try:

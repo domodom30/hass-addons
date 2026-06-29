@@ -172,7 +172,7 @@
     "hwVolume": "Volume matériel (%)",
     "hwVolumeHelp": "Définit le volume matériel de l'enceinte au démarrage de MPD (1–100 %). MPD contrôle ensuite le volume perçu. Par défaut : 100 %.",
     "volumeHardware": "Piloter le volume matériel de l'enceinte",
-    "volumeHardwareHelp": "Si activé, media_player.volume_set pilote le volume matériel réel de l'enceinte (AVRCP) comme unique réglage de volume — MPD n'atténue plus en logiciel, donc pas de double atténuation. Recommandé quand un autre lecteur (ex. un assistant vocal) partage la même enceinte, pour qu'un même niveau de volume sonne pareil.",
+    "volumeHardwareHelp": "Si activé, media_player.volume_set (y compris Music Assistant) pilote le volume matériel réel de l'enceinte (AVRCP) dans les deux sens — MPD utilise un mixer matériel et garde sa sortie ouverte, donc le volume marche même à l'arrêt. La gestion d'inactivité (mise en veille du sink / déconnexion auto) est désactivée pour ce périphérique : à réserver aux enceintes toujours alimentées. Si désactivé, MPD utilise un mixer logiciel (sûr à l'arrêt) et ne touche pas au volume matériel.",
     "mpdPort": "Port MPD",
     "mpdPortHelp": "Port de l'instance MPD de cette enceinte (6600–6609). Attribué automatiquement à la première activation.",
     "usePort": "Utilisez le port {port} lors de l'ajout de l'intégration MPD de HA.",
