@@ -1,4 +1,3 @@
-import { AudioManage } from '@domodom30/ttlock-sdk-js';
 import store from '../src/store.js';
 import manager from '../src/manager.js';
 
@@ -41,37 +40,27 @@ class Lock {
   /**
    * @param {import('ttlock-sdk-js').TTLock} lockObject
    * @param {string} address
-   * @returns {Promise<number|undefined>}
+   * @returns {number|undefined}
    */
-  static async _resolveAutoLockTime(lockObject, address) {
-    const cached = manager.getCachedAutoLock(address);
-    if (cached !== undefined) return cached;
-    if (lockObject.isConnected() || manager.isLockBusy(address)) return undefined;
-    try {
-      return await lockObject.getAutolockTime();
-    } catch {
-      return undefined;
-    }
+  static _resolveAutoLockTime(lockObject, address) {
+    // Cache-only: fromTTLock runs on every status broadcast and must NEVER touch the BLE
+    // bus (see fromTTLock). The cache is populated by the mutex-guarded calibrate flow
+    // (manager._tryCalibrateTime). undefined => not yet known.
+    return manager.getCachedAutoLock(address);
   }
 
   /**
    * @param {import('ttlock-sdk-js').TTLock} lockObject
    * @param {string} address
-   * @returns {Promise<boolean|undefined>}
+   * @returns {boolean|undefined}
    */
-  static async _resolveAudio(lockObject, address) {
-    const cached = manager.getCachedAudio(address);
-    if (cached !== undefined) return cached;
-    if (manager.isLockBusy(address)) return undefined;
-    try {
-      const sound = await lockObject.getLockSound();
-      if (sound === AudioManage.TURN_ON || sound === AudioManage.TURN_OFF) {
-        return sound === AudioManage.TURN_ON;
-      }
-    } catch {
-      // not yet available
-    }
-    return undefined;
+  static _resolveAudio(lockObject, address) {
+    // Cache-only: fromTTLock runs on every status broadcast and must NEVER touch the BLE
+    // bus (see fromTTLock). Issuing getLockSound() here fired an un-serialized
+    // audioManageCommand outside the global radio mutex, racing with macro_adminLogin and
+    // causing "No response to checkAdmin" / "No response to get audioManage". The cache is
+    // populated by the mutex-guarded flows (manager.getAudio / setAudio). undefined => not yet known.
+    return manager.getCachedAudio(address);
   }
 
   /**
@@ -149,8 +138,8 @@ class Lock {
 
     // STRICTLY non-BLE from here on: this method runs on every status broadcast and must
     // NEVER touch the BLE bus, otherwise it races with user ops (=> "Command already in progress").
-    lock.autoLockTime = await Lock._resolveAutoLockTime(lockObject, lock.address);
-    lock.audio = await Lock._resolveAudio(lockObject, lock.address);
+    lock.autoLockTime = Lock._resolveAutoLockTime(lockObject, lock.address);
+    lock.audio = Lock._resolveAudio(lockObject, lock.address);
 
     lock.hasAutoLock = lockObject.hasAutolock();
     lock.hasPasscode = lockObject.hasPassCode();
