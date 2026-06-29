@@ -214,6 +214,18 @@ when MPD starts. MPD's software volume then acts as the single volume knob — s
 | **HA automation** `media_player.volume_set` | MPD software volume changes → effective output = that % |
 | **TTS with volume preset** | Automation sets volume then speaks → plays at that level |
 
+**Control speaker hardware volume** — by default MPD attenuates its own
+software stream while the speaker's hardware (AVRCP) volume stays at the
+configured *Hardware Volume*. Enable this toggle to instead make
+`media_player.volume_set` drive the speaker's **hardware/AVRCP volume directly**
+as the single volume knob — MPD no longer attenuates in software, so there is no
+double attenuation.
+
+> 💡 **When to enable it:** if another player (for example an ESPHome voice
+> assistant satellite) plays on the *same* Bluetooth speaker, enable this so both
+> players act on the same hardware volume — an equal `volume_level` then sounds
+> equally loud on both.
+
 > 💡 **Adding the speaker to HA:** install the **MPD** integration and point it
 > at the port shown in the device settings (e.g. port 6600). The hostname and
 > password status are shown in **App Settings** under "MPD Connection Info" —

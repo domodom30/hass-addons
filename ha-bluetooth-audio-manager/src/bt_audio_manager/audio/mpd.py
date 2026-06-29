@@ -33,11 +33,18 @@ class MPDManager:
         speaker_name: str,
         password: str | None = None,
         log_level: str = "info",
+        volume_hardware: bool = False,
     ) -> None:
         self._address = address
         self._port = port
         self._speaker_name = speaker_name
         self._password = password
+        # When True, MPD must not attenuate in software: the speaker's
+        # hardware/AVRCP volume (PulseAudio sink) is the single volume knob,
+        # driven via the on_volume_change bridge. A "null" mixer remembers and
+        # reports the volume to HA but leaves the audio stream untouched, which
+        # avoids the double (software × hardware) attenuation.
+        self._volume_hardware = volume_hardware
         # Map app log level to MPD log level:
         # debug → "verbose" (full client/command chatter)
         # anything else → "default" (errors/warnings only)
@@ -142,7 +149,7 @@ class MPDManager:
                 type        "pulse"
                 name        "{speaker_name}"
                 sink        "{sink}"
-                mixer_type  "software"
+                mixer_type  "{mixer_type}"
             }}
 
             input {{
@@ -156,6 +163,7 @@ class MPDManager:
             speaker_name=self._speaker_name.replace("\\", "\\\\").replace('"', '\\"'),
             sink=self._sink_name.replace("\\", "\\\\").replace('"', '\\"'),
             mpd_log_level=self._mpd_log_level,
+            mixer_type="null" if self._volume_hardware else "software",
         )
 
         with open(self._conf_path, "w") as f:
