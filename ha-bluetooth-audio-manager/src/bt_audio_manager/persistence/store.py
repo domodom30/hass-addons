@@ -27,7 +27,7 @@ DEFAULT_DEVICE_SETTINGS = {
     "mpd_enabled": False,
     "mpd_port": None,   # Auto-assigned from pool (6600-6609); user can override
     "mpd_hw_volume": 100,  # Hardware volume % set when MPD starts (1-100)
-    "mpd_volume_hardware": False,  # True = volume_set drives the speaker's hardware/AVRCP volume as the single knob (MPD uses a null mixer, no software attenuation)
+    "mpd_volume_hardware": False,  # Legacy toggle; MPD now always uses a hardware mixer so volume_set drives the speaker's hardware/AVRCP volume directly
     "avrcp_enabled": True,  # Auto-track PlaybackStatus; False = always Stopped
     "auto_connect": True,  # Per-device auto-reconnect (startup + post-disconnect)
 }

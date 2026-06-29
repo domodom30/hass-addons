@@ -1,3 +1,19 @@
+## [3.3.2] — 2026-06-29
+
+### 🐛 Fixed
+
+- **Volume control restored for external players (e.g. Music Assistant)**: MPD
+  now uses a hardware mixer for its PulseAudio output again, so `setvol` (from
+  `media_player.volume_set`, Music Assistant, etc.) drives the speaker's real
+  hardware/AVRCP volume directly, and changing the volume on the speaker is
+  reflected back on the slider — bidirectionally, as before. The `software`/
+  `null` mixer introduced in 3.3.0/3.3.1 had decoupled MPD's volume from the
+  PulseAudio sink, and the compensating bridge did not propagate volume changes
+  coming from Music Assistant. The per-device *Control speaker hardware volume*
+  toggle no longer affects the mixer type.
+
+---
+
 ## [3.3.1] — 2026-06-29
 
 ### 🐛 Fixed

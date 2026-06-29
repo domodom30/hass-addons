@@ -3062,9 +3062,6 @@ class BluetoothAudioManager:
             speaker_name=mpd_name,
             password=mpd_password,
             log_level=self.config.log_level,
-            volume_hardware=self.store.get_device_settings(address).get(
-                "mpd_volume_hardware", False
-            ),
         )
         mpd.on_volume_change(self._on_mpd_volume_change)
         try:
