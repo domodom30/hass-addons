@@ -297,6 +297,20 @@ async function handleOperations(api, msg) {
   // cache présent → silencieux (choix utilisateur)
 }
 
+async function handleRename(wss, msg) {
+  if (!msg.data?.address || typeof msg.data.name !== 'string') return;
+  const address = msg.data.address;
+  // Custom names are a local alias (the SDK cannot write a name to the lock).
+  // An empty name clears the alias and reverts to the BLE-advertised name.
+  const name = msg.data.name.trim().slice(0, 64);
+  if (name) {
+    store.setLockAlias(address, name);
+  } else {
+    store.deleteLockAlias(address);
+  }
+  WsApi.sendStatus(wss);
+}
+
 async function handleUnpair(api, msg) {
   if (!msg.data?.address) return;
   const res = await manager.resetLock(msg.data.address);
@@ -355,6 +369,9 @@ async function onMessage(wss, api, ws, message) {
       break;
     case 'operations':
       await handleOperations(api, msg);
+      break;
+    case 'rename':
+      await handleRename(wss, msg);
       break;
     case 'unpair':
       await handleUnpair(api, msg);

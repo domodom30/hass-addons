@@ -1,7 +1,33 @@
 # Changelog
 
-All notable changes to this project are documented here.
-Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
+
+## [2.5.12] — 2026-06-30
+
+### 🐛 Fixed
+
+- **All lock/unlock buttons spun at the same time**: the `waiting` computed in `Lock.vue`
+  relied on global flags (`waiting`, `waitingCredentials`, `scanStatus`). A new `waitingAddress`
+  in the store targets the lock actually being operated; `Lock.vue` now shows the spinner only
+  for that lock (`waiting && waitingAddress === lock.address`).
+
+---
+
+## [2.5.11] — 2026-06-30
+
+### 🐛 Fixed
+
+- **Lock name reverted to the MAC address after disconnect**: the BLE name (GATT `2a00`) is only
+  readable while connected and was never persisted. On disconnect, `Lock.fromStoreEntry` fell back
+  to `getLockAlias(address) || address` → the MAC. The BLE name is now cached (`store.setLockName`
+  in `deviceInfoData`) as soon as it is known, and both serialization paths resolve the name in the
+  order **alias → live BLE name → persisted BLE name → MAC**, so the name stays stable offline.
+
+### ✨ Added
+
+- **Lock renaming**: new "Rename" entry in each card's menu (a pre-filled dialog). The custom name
+  is stored locally (`aliasData.json`, via the new `rename` websocket command); clearing the field
+  removes the alias and reverts to the BLE name. The alias is also used as the device name in Home
+  Assistant MQTT discovery.
 
 ---
 
@@ -9,16 +35,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### 🐛 Fixed
 
-- **Régression 2.5.8 — audio & temps d'auto-verrouillage non affichés** : en rendant
-  `Lock._resolveAudio()` / `Lock._resolveAutoLockTime()` strictement *cache-only* (pour stopper la
-  contention BLE avec `macro_adminLogin`), le fallback BLE qui surfaçait ces valeurs a été supprimé,
-  mais **aucun flux n'alimentait `_cachedAudio` / `_cachedAutoLock` à la connexion** — seuls
-  `setAudio`/`getAudio`/`calibrate` les remplissaient. `fromTTLock` lisait donc des caches vides
-  (`undefined`) et l'interface n'affichait plus ni l'audio ni l'auto-lock. Un nouveau helper
-  `manager._cacheLockSettings(lock)`, appelé dans `_onLockConnected` après `_saveLockFeatures` (et
-  avant la diffusion de statut), peuple les caches depuis les propriétés **déjà lues par le SDK**
-  (`lock.autoLockTime`, `lock.lockSound`) — **sans nouveau BLE** : le contrat *cache-only* de
-  `fromTTLock` reste intact, mais les valeurs réapparaissent dès la première (re)connexion du monitor
+- **Regression 2.5.8 — audio & auto-lock time not displayed**: by making
+  `Lock._resolveAudio()` / `Lock._resolveAutoLockTime()` strictly *cache-only* (to stop the BLE
+  contention with `macro_adminLogin`), the BLE fallback that surfaced these values was removed,
+  but **no flow populated `_cachedAudio` / `_cachedAutoLock` on connect** — only
+  `setAudio`/`getAudio`/`calibrate` filled them. `fromTTLock` therefore read empty caches
+  (`undefined`) and the UI no longer showed audio or auto-lock. A new helper
+  `manager._cacheLockSettings(lock)`, called in `_onLockConnected` after `_saveLockFeatures` (and
+  before the status broadcast), populates the caches from properties **already read by the SDK**
+  (`lock.autoLockTime`, `lock.lockSound`) — **without any new BLE**: the *cache-only* contract of
+  `fromTTLock` stays intact, but the values reappear on the first (re)connection of the monitor
 
 ---
 
@@ -26,21 +52,21 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### 🐛 Fixed
 
-- **Persistance disque — course sur `saveData()`** : `saveData()` est `async` mais appelé en
-  fire-and-forget depuis une dizaine de mutateurs (`setLockData`, `setDeviceInfo`, `setLockFeatures`,
-  alias…). Une rafale d'appels concurrents (typiquement après le traitement d'un journal d'opérations)
-  se disputait le même fichier `.tmp` : le premier `rename` le consommait, les suivants échouaient en
-  `ENOENT` (`rename '/data/lockData.json.tmp' -> '/data/lockData.json'`, idem `aliasData.json` /
-  `deviceInfoData.json`). Résultat : rien n'était persisté dans `/data`, le cache `lockData.json` ne se
-  mettait jamais à jour et le chemin *cache-only* (2.5.8) n'avait rien à servir après un redémarrage.
-  `saveData()` sérialise désormais les écritures avec coalescence des rafales (`_doSaveData()` relit
-  l'état mémoire courant à son exécution → on persiste toujours la version la plus récente)
-- **Identifiants — échec silencieux** : sur échec de connexion BLE, `getCredentials()` renvoyait le
-  sentinel *truthy* `{ passcodes: false, cards: false, fingers: false }`, que `handleCredentials`
-  interprétait comme un succès → panneau vide sans message. Les vrais échecs (serrure injoignable,
-  connexion/reconnexion impossible, toutes les lectures échouées après 3 essais) renvoient maintenant
-  `false`, déclenchant l'erreur « Failed fetching credentials » et débloquant le spinner. Une serrure
-  réellement sans capacité conserve son résultat légitime (`{false,false,false}`)
+- **Disk persistence — race on `saveData()`**: `saveData()` is `async` but called fire-and-forget
+  from a dozen mutators (`setLockData`, `setDeviceInfo`, `setLockFeatures`, aliases…). A burst of
+  concurrent calls (typically after processing an operation log) competed for the same `.tmp` file:
+  the first `rename` consumed it, the following ones failed with `ENOENT`
+  (`rename '/data/lockData.json.tmp' -> '/data/lockData.json'`, same for `aliasData.json` /
+  `deviceInfoData.json`). Result: nothing was persisted to `/data`, the `lockData.json` cache never
+  updated, and the *cache-only* path (2.5.8) had nothing to serve after a restart. `saveData()` now
+  serializes writes with burst coalescing (`_doSaveData()` re-reads the current in-memory state at
+  execution time → the most recent version is always persisted)
+- **Credentials — silent failure**: on BLE connection failure, `getCredentials()` returned the
+  *truthy* sentinel `{ passcodes: false, cards: false, fingers: false }`, which `handleCredentials`
+  interpreted as success → empty panel with no message. Real failures (lock unreachable,
+  connection/reconnection impossible, all reads failed after 3 attempts) now return `false`,
+  triggering the "Failed fetching credentials" error and unblocking the spinner. A lock genuinely
+  without a capability keeps its legitimate result (`{false,false,false}`)
 
 ---
 
@@ -48,8 +74,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### 🐛 Fixed
 
-- **BLE — contention sur le login admin** : `Lock.fromTTLock()` (chemin de diffusion de statut, exécuté à chaque `WsApi.sendLockStatus` / `getLocks`) émettait une commande BLE `getLockSound()` / `getAutolockTime()` non sérialisée, hors du mutex radio global. Cette commande entrait en collision avec la boucle `macro_adminLogin`, provoquant des `No response to checkAdmin` et `No response to get audioManage`. `_resolveAudio()` et `_resolveAutoLockTime()` sont désormais strictement *cache-only* (lecture de `_cachedAudio` / `_cachedAutoLock`, alimentés par les flux mutex-gardés `getAudio` / setAudio / calibrate), respectant le contrat « non-BLE » déjà documenté dans `fromTTLock`
-- **Version** : `addon/package.json` (resté à `2.5.1`) réaligné sur la version de release — le banner de démarrage affichait une version erronée
+- **BLE — contention on admin login**: `Lock.fromTTLock()` (status broadcast path, executed on every `WsApi.sendLockStatus` / `getLocks`) emitted an unserialized BLE command `getLockSound()` / `getAutolockTime()` outside the global radio mutex. This command collided with the `macro_adminLogin` loop, causing `No response to checkAdmin` and `No response to get audioManage`. `_resolveAudio()` and `_resolveAutoLockTime()` are now strictly *cache-only* (reading `_cachedAudio` / `_cachedAutoLock`, populated by the mutex-guarded flows `getAudio` / setAudio / calibrate), respecting the "non-BLE" contract already documented in `fromTTLock`
+- **Version**: `addon/package.json` (left at `2.5.1`) realigned to the release version — the startup banner showed an incorrect version
 
 ---
 

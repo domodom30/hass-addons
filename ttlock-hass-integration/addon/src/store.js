@@ -63,6 +63,13 @@ class Store {
     return Object.hasOwn(this.aliasData.lock, address) ? this.aliasData.lock[address] : defaultValue;
   }
 
+  deleteLockAlias(address) {
+    if (Object.hasOwn(this.aliasData.lock, address)) {
+      delete this.aliasData.lock[address];
+      this.saveData();
+    }
+  }
+
   setCardAlias(card, alias) {
     if (alias !== undefined && alias !== '') {
       this.aliasData.card[card] = alias;
@@ -134,6 +141,31 @@ class Store {
    */
   getDeviceInfo(address) {
     return this.deviceInfoData[address];
+  }
+
+  /**
+   * Persist the last-known BLE-advertised name for a lock. The SDK only exposes
+   * the GATT device name (2a00) while connected; caching it here lets the offline
+   * serialization path (Lock.fromStoreEntry) show the real name instead of the MAC.
+   * Only triggers a disk write when the value actually changed.
+   * @param {string} address Lock MAC address
+   * @param {string} name BLE-advertised name
+   */
+  setLockName(address, name) {
+    if (!address || !name) return;
+    if (!this.deviceInfoData[address]) this.deviceInfoData[address] = {};
+    if (this.deviceInfoData[address].name === name) return;
+    this.deviceInfoData[address].name = name;
+    this.saveData();
+  }
+
+  /**
+   * Get the persisted BLE name for a lock
+   * @param {string} address Lock MAC address
+   * @returns {string|undefined}
+   */
+  getLockName(address) {
+    return this.deviceInfoData[address]?.name;
   }
 
   /**

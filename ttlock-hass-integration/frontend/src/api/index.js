@@ -239,6 +239,18 @@ class Api {
     );
   }
 
+  async rename(address, name) {
+    this.ws.send(
+      JSON.stringify({
+        type: 'rename',
+        data: {
+          address: address,
+          name: name
+        }
+      })
+    );
+  }
+
   async restartGateway() {
     this.ws.send(
       JSON.stringify({
