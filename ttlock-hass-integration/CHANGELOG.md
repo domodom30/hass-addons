@@ -1,6 +1,20 @@
 # Changelog
 
 
+## [2.5.13] — 2026-06-30
+
+### 🔧 Changed
+
+- **Add-on config migrated from `config.json` to `config.yaml`** (the modern HA add-on
+  standard, matching the other add-on in the repo). Same content; the CI version
+  extractor, the sync-versions trigger/script now read the YAML.
+- **App version badge & GitHub link sourced from `config.yaml`**: `vite.config.js` now
+  injects `VITE_APP_VERSION` / `VITE_APP_GITHUB` from `config.yaml` (`version` + `url`)
+  instead of the stale frontend `package.json`, so the `AppTopBar` badge and GitHub link
+  always reflect the real add-on version and repository URL.
+
+---
+
 ## [2.5.12] — 2026-06-30
 
 ### 🐛 Fixed
