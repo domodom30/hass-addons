@@ -22,6 +22,7 @@ const store = createStore({
     fingerScanProgress: 0,
     waitingOperations: false,
     waiting: false,
+    waitingAddress: '',
     errors: [],
     notices: [],
     activeLockAddress: '',
@@ -64,6 +65,7 @@ const store = createStore({
     setLocks(state, locks) {
       state.locks = locks;
       state.waiting = false;
+      state.waitingAddress = '';
     },
     setLock(state, updatedLock) {
       let newLocks = [];
@@ -89,6 +91,7 @@ const store = createStore({
       }
       state.locks = newLocks;
       state.waiting = false;
+      state.waitingAddress = '';
     },
     setWaitingCredentials(state) {
       state.waitingCredentials = true;
@@ -102,8 +105,9 @@ const store = createStore({
     setFingerScanProgress(state) {
       state.fingerScanProgress++;
     },
-    setWaiting(state) {
+    setWaiting(state, address = '') {
       state.waiting = true;
+      state.waitingAddress = address;
     },
     setCredentials(state, data) {
       if (!data?.address) return;
@@ -137,6 +141,7 @@ const store = createStore({
     setError(state, data) {
       state.errors.push(data);
       state.waiting = false;
+      state.waitingAddress = '';
       state.waitingCredentials = false;
       state.waitingCardScan = false;
       state.waitingFingerScan = false;
@@ -199,6 +204,7 @@ const store = createStore({
 
     clearWaitingFlags(state) {
       state.waiting = false;
+      state.waitingAddress = '';
       state.waitingCredentials = false;
       state.waitingCardScan = false;
       state.waitingFingerScan = false;
@@ -225,17 +231,17 @@ const store = createStore({
     },
     async unlock({ state, commit }, lockAddress) {
       if (state.waiting) return;
-      commit('setWaiting');
+      commit('setWaiting', lockAddress);
       api.unlock(lockAddress);
     },
     async lock({ state, commit }, lockAddress) {
       if (state.waiting) return;
-      commit('setWaiting');
+      commit('setWaiting', lockAddress);
       api.lock(lockAddress);
     },
     async pair({ state, commit }, lockAddress) {
       if (state.waiting) return;
-      commit('setWaiting');
+      commit('setWaiting', lockAddress);
       api.pair(lockAddress);
     },
     async setAutoLock({ state, commit }, { lockAddress, time }) {
@@ -289,8 +295,11 @@ const store = createStore({
     },
     async unpair({ state, commit }, lockAddress) {
       if (state.waiting) return;
-      commit('setWaiting');
+      commit('setWaiting', lockAddress);
       api.unpair(lockAddress);
+    },
+    async rename(_, { lockAddress, name }) {
+      api.rename(lockAddress, name);
     },
     async restartGateway({ state, commit }) {
       if (state.waitingGatewayRestart) return;

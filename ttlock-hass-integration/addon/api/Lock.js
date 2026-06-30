@@ -95,7 +95,7 @@ class Lock {
     const deviceInfo = store.getDeviceInfo(address);
 
     lock.address = address;
-    lock.name = store.getLockAlias(address) || address;
+    lock.name = store.getLockAlias(address) || store.getLockName(address) || address;
     lock.paired = true;
     lock.connected = false;
     lock.rssi = typeof entry.rssi === 'number' ? entry.rssi : -1;
@@ -124,7 +124,11 @@ class Lock {
     const lock = new Lock();
 
     lock.address = lockObject.getAddress();
-    lock.name = lockObject.getName() || lock.address;
+    // The BLE name (GATT 2a00) is only available while connected. Persist it so the
+    // offline path (fromStoreEntry) keeps showing the real name instead of the MAC.
+    const bleName = lockObject.getName();
+    if (bleName) store.setLockName(lock.address, bleName);
+    lock.name = store.getLockAlias(lock.address) || bleName || store.getLockName(lock.address) || lock.address;
     lock.paired = lockObject.isPaired();
     lock.connected = lockObject.isConnected();
     lock.rssi = lockObject.getRssi();

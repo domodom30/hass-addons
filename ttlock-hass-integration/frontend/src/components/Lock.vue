@@ -112,6 +112,12 @@
               </template>
               <v-list-item-title class="text-caption">{{ $t('lock.settings') }}</v-list-item-title>
             </v-list-item>
+            <v-list-item @click="openRename">
+              <template #prepend>
+                <v-icon color="info" size="18" class="mr-3">mdi-rename-box</v-icon>
+              </template>
+              <v-list-item-title class="text-caption">{{ $t('lock.rename') }}</v-list-item-title>
+            </v-list-item>
             <v-divider class="my-1" />
             <v-list-item @click="openOverlay('credentials')">
               <template #prepend>
@@ -123,6 +129,32 @@
         </v-menu>
       </template>
     </div>
+
+    <!-- Dialogue de renommage -->
+    <v-dialog v-model="renameDialog" max-width="420">
+      <v-card>
+        <v-card-title class="text-subtitle-1">{{ $t('lock.renameTitle') }}</v-card-title>
+        <v-card-text>
+          <v-text-field
+            v-model="renameValue"
+            :label="$t('lock.renameLabel')"
+            :placeholder="lock.address"
+            variant="outlined"
+            density="comfortable"
+            autofocus
+            counter="64"
+            maxlength="64"
+            hide-details="auto"
+            @keyup.enter="saveRename"
+          />
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn variant="text" @click="renameDialog = false">{{ $t('common.cancel') }}</v-btn>
+          <v-btn color="primary" variant="flat" @click="saveRename">{{ $t('common.save') }}</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
   </v-card>
 </template>
 
@@ -130,7 +162,7 @@
 export default {
   props: ["lock"],
   data() {
-    return { busy: false }
+    return { busy: false, renameDialog: false, renameValue: "" }
   },
   computed: {
     canLock() {
@@ -143,7 +175,7 @@ export default {
       return !this.lock.paired
     },
     waiting() {
-      return this.$store.state.waiting || this.$store.state.waitingCredentials || this.$store.state.scanStatus == 1
+      return this.$store.state.waiting && this.$store.state.waitingAddress === this.lock.address
     },
     batteryIcon() {
       const b = this.lock.battery
@@ -229,6 +261,18 @@ export default {
     },
     openOverlay(overlay) {
       this.$store.commit("setOverlay", { overlay, address: this.lock.address })
+    },
+    openRename() {
+      this.renameValue = this.lock.name === this.lock.address ? "" : this.lock.name
+      this.renameDialog = true
+    },
+    async saveRename() {
+      this.renameDialog = false
+      try {
+        await this.$store.dispatch("rename", { lockAddress: this.lock.address, name: this.renameValue.trim() })
+      } catch (error) {
+        console.error(error)
+      }
     },
   },
   watch: {
