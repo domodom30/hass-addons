@@ -4,15 +4,23 @@ import vuetify from "vite-plugin-vuetify";
 import { fileURLToPath, URL } from "node:url";
 import { readFileSync } from "node:fs";
 
-const pkg = JSON.parse(
-  readFileSync(new URL("./package.json", import.meta.url), "utf-8"),
+// Source of truth for the version badge and GitHub link is the add-on's
+// config.yaml (one level up), not package.json. Extract via regex to avoid a
+// YAML parser dependency — same approach as scripts/sync_versions.py.
+const configYaml = readFileSync(
+  new URL("../config.yaml", import.meta.url),
+  "utf-8",
 );
+const readYamlValue = (key) => {
+  const m = configYaml.match(new RegExp(`^${key}:\\s*"?([^"\\n]+?)"?\\s*$`, "m"));
+  return m ? m[1].trim() : "";
+};
 
 export default defineConfig(({ command }) => ({
   base: command === "build" ? "./" : "/",
   define: {
-    "import.meta.env.VITE_APP_VERSION": JSON.stringify(pkg.version),
-    "import.meta.env.VITE_APP_GITHUB": JSON.stringify(pkg.homepage),
+    "import.meta.env.VITE_APP_VERSION": JSON.stringify(readYamlValue("version")),
+    "import.meta.env.VITE_APP_GITHUB": JSON.stringify(readYamlValue("url")),
   },
   plugins: [vue(), vuetify({ autoImport: true })],
   resolve: {

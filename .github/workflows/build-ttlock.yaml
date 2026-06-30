@@ -31,7 +31,8 @@ jobs:
       - uses: actions/checkout@v4
       - id: v
         run: |
-          VERSION=$(python3 -c "import json; print(json.load(open('ttlock-hass-integration/config.json'))['version'])")
+          VERSION=$(grep '^version:' ttlock-hass-integration/config.yaml \
+            | sed 's/version: *"\?\([^"]*\)"\?/\1/')
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
 
   build:

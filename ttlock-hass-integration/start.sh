@@ -38,7 +38,7 @@ fi
 # shared RAW channel where passive scan works but "LE Create Connection" gets
 # clobbered (every connect() times out). Powering the adapter off via BlueZ frees
 # it; noble then opens it on its OWN exclusive HCI user channel and brings it back
-# up itself — which requires the NET_ADMIN capability (see config.json privileged).
+# up itself — which requires the NET_ADMIN capability (see config.yaml privileged).
 # Skipped in gateway mode (BLE runs on the remote ESP32, not the local adapter).
 cd /app
 npm start

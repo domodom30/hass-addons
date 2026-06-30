@@ -1,0 +1,51 @@
+name: "TTLock"
+version: "2.5.12"
+slug: ttlock-hass-integration
+description: "Integration of the offline TTLock SDK into Home Assistant"
+url: "https://github.com/domodom30/hass-addons"
+image: "ghcr.io/domodom30/{arch}-ttlock-hass-integration"
+arch:
+  - amd64
+  - aarch64
+panel_icon: "mdi:key-wireless"
+startup: application
+boot: auto
+
+# Permissions
+homeassistant_api: true
+hassio_api: true
+host_network: true
+host_dbus: true
+auth_api: true
+privileged:
+  - NET_ADMIN
+  - NET_RAW
+
+# Ingress UI
+ingress: true
+ingress_port: 55099
+ingress_entry: "frontend/"
+
+# Services
+services:
+  - mqtt:want
+
+# User options
+options:
+  gateway: "none"
+  ignore_crc: true
+  discovery_prefix: "homeassistant"
+
+schema:
+  gateway: "match(^none|noble$)"
+  discovery_prefix: "str?"
+  gateway_host: "str?"
+  gateway_port: "port?"
+  gateway_key: "str?"
+  gateway_user: "str?"
+  gateway_pass: "str?"
+  ignore_crc: "bool?"
+  debug_communication: "bool?"
+  debug_mqtt: "bool?"
+  gateway_debug: "bool?"
+  oplog_cooldown: "int?"
