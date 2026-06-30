@@ -1,6 +1,25 @@
 # Changelog
 
 
+## [2.5.14] — 2026-06-30
+
+### 🐛 Fixed
+
+- **Bumped `@domodom30/ttlock-sdk-js` to `0.7.2`** — SDK audit fixes (P0/P1/P2):
+  - IC card deletion of long (8-byte) card numbers no longer sends an empty
+    command; the field width is chosen by value so 10-digit numbers no longer
+    throw.
+  - Operation-log records in a multi-record page get distinct record numbers
+    (previously all but the last were dropped from the cache).
+  - Passcode add/update/delete validate input before sending instead of
+    transmitting an empty frame.
+  - noble listener leaks fixed (scanner/characteristic/descriptor) → no more
+    `MaxListenersExceeded` over long runs / reconnections.
+  - `connect()` no longer wedges on a throw; the auto-lock timer is cancelled on
+    manual lock/unlock and on disconnect; assorted robustness fixes.
+
+---
+
 ## [2.5.13] — 2026-06-30
 
 ### 🔧 Changed
