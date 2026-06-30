@@ -1689,6 +1689,24 @@ class Manager extends EventEmitter {
     });
   }
 
+  /**
+   * Populate the audio / auto-lock caches from values the SDK already fetched during
+   * onConnected (lock.autoLockTime is restored from lockData.json or read once; lock.lockSound
+   * is read via audioManageCommand). STRICTLY non-BLE — plain property reads only — so it honors
+   * the cache-only contract of Lock.fromTTLock. Without this, fromTTLock reads empty caches and
+   * the UI shows neither setting until the user triggers calibrate/getAudio/setAudio.
+   * @param {import('ttlock-sdk-js').TTLock} lock
+   */
+  _cacheLockSettings(lock) {
+    const address = lock.getAddress();
+    if (lock.hasAutolock() && typeof lock.autoLockTime === 'number' && lock.autoLockTime >= 0) {
+      this._cachedAutoLock.set(address, lock.autoLockTime);
+    }
+    if (lock.hasLockSound() && (lock.lockSound === AudioManage.TURN_ON || lock.lockSound === AudioManage.TURN_OFF)) {
+      this._cachedAudio.set(address, lock.lockSound === AudioManage.TURN_ON);
+    }
+  }
+
   // Called by every user operation in a finally block to release the waitingForConnect
   // guard and restart the monitor if the lock has already disconnected.
   _releaseConnect(address) {
@@ -1896,6 +1914,7 @@ class Manager extends EventEmitter {
         }
       }
       this._saveLockFeatures(lock);
+      this._cacheLockSettings(lock);
       this.emit('lockConnected', lock);
     } else {
       console.log('Connected to new lock ' + lock.getAddress());
