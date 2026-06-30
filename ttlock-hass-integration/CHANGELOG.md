@@ -5,6 +5,28 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [2.5.9] — 2026-06-30
+
+### 🐛 Fixed
+
+- **Persistance disque — course sur `saveData()`** : `saveData()` est `async` mais appelé en
+  fire-and-forget depuis une dizaine de mutateurs (`setLockData`, `setDeviceInfo`, `setLockFeatures`,
+  alias…). Une rafale d'appels concurrents (typiquement après le traitement d'un journal d'opérations)
+  se disputait le même fichier `.tmp` : le premier `rename` le consommait, les suivants échouaient en
+  `ENOENT` (`rename '/data/lockData.json.tmp' -> '/data/lockData.json'`, idem `aliasData.json` /
+  `deviceInfoData.json`). Résultat : rien n'était persisté dans `/data`, le cache `lockData.json` ne se
+  mettait jamais à jour et le chemin *cache-only* (2.5.8) n'avait rien à servir après un redémarrage.
+  `saveData()` sérialise désormais les écritures avec coalescence des rafales (`_doSaveData()` relit
+  l'état mémoire courant à son exécution → on persiste toujours la version la plus récente)
+- **Identifiants — échec silencieux** : sur échec de connexion BLE, `getCredentials()` renvoyait le
+  sentinel *truthy* `{ passcodes: false, cards: false, fingers: false }`, que `handleCredentials`
+  interprétait comme un succès → panneau vide sans message. Les vrais échecs (serrure injoignable,
+  connexion/reconnexion impossible, toutes les lectures échouées après 3 essais) renvoient maintenant
+  `false`, déclenchant l'erreur « Failed fetching credentials » et débloquant le spinner. Une serrure
+  réellement sans capacité conserve son résultat légitime (`{false,false,false}`)
+
+---
+
 ## [2.5.8] — 2026-06-29
 
 ### 🐛 Fixed

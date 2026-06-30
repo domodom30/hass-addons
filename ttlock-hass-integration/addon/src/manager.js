@@ -724,7 +724,7 @@ class Manager extends EventEmitter {
   async _doGetCredentials(address) {
     const lock = this.pairedLocks.get(address);
     if (lock === undefined) {
-      return { passcodes: false, cards: false, fingers: false };
+      return false;
     }
 
     const MAX_READ_ATTEMPTS = 3;
@@ -734,7 +734,7 @@ class Manager extends EventEmitter {
     // the monitor, which then must be stopped again before reconnecting — this
     // BLE scan cycle adds 3-5s of latency and makes the retry unreliable.
     if (!(await this._connectLock(lock))) {
-      return { passcodes: false, cards: false, fingers: false };
+      return false;
     }
 
     try {
@@ -760,7 +760,7 @@ class Manager extends EventEmitter {
           }
           if (!reconnected) {
             console.error('getCredentials: reconnect failed on retry', readAttempt);
-            return { passcodes: false, cards: false, fingers: false };
+            return false;
           }
         }
 
@@ -793,13 +793,20 @@ class Manager extends EventEmitter {
 
         const allFailed = (lock.hasPassCode() ? passcodes === false : false) || (lock.hasICCard() ? cardsRaw === false : false) || (lock.hasFingerprint() ? fingersRaw === false : false);
 
-        if (!allFailed || readAttempt >= MAX_READ_ATTEMPTS) {
+        // Succès (même partiel) : on renvoie l'objet. Pour une serrure sans aucune
+        // capacité, allFailed vaut false → on renvoie {false,false,false}, résultat légitime.
+        if (!allFailed) {
           return { passcodes, cards, fingers };
+        }
+        // Toutes les lectures ont échoué : après le dernier essai, on renvoie false pour
+        // que handleCredentials émette une vraie erreur au lieu d'afficher un panneau vide.
+        if (readAttempt >= MAX_READ_ATTEMPTS) {
+          return false;
         }
 
         console.warn(`getCredentials: all reads failed (attempt ${readAttempt}/${MAX_READ_ATTEMPTS}) — will retry`);
       }
-      return { passcodes: false, cards: false, fingers: false };
+      return false;
     } finally {
       // Single release covers all retry attempts — monitor restarts once here
       this._releaseConnect(address);

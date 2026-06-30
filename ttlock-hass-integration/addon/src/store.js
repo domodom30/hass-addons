@@ -245,6 +245,28 @@ class Store {
   }
 
   async saveData() {
+    // Sérialise les écritures : les appels fire-and-forget concurrents (setLockData,
+    // setDeviceInfo, setLockFeatures, alias…) ne doivent jamais se disputer le même nom
+    // de .tmp, sinon le premier rename consomme le fichier et les suivants tombent sur
+    // ENOENT. La coalescence fusionne les rafales — chaque _doSaveData() relit l'état
+    // mémoire courant à son exécution, donc on persiste toujours la version la plus récente.
+    this._savePending = true;
+    if (this._saving) return this._saveChain;
+    this._saving = true;
+    this._saveChain = (async () => {
+      try {
+        while (this._savePending) {
+          this._savePending = false;
+          await this._doSaveData();
+        }
+      } finally {
+        this._saving = false;
+      }
+    })();
+    return this._saveChain;
+  }
+
+  async _doSaveData() {
     try {
       const lockPath = this.settingsPath + '/lockData.json';
       const tmpLock = lockPath + '.tmp';
