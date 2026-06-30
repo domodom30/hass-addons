@@ -5,6 +5,23 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [2.5.10] — 2026-06-30
+
+### 🐛 Fixed
+
+- **Régression 2.5.8 — audio & temps d'auto-verrouillage non affichés** : en rendant
+  `Lock._resolveAudio()` / `Lock._resolveAutoLockTime()` strictement *cache-only* (pour stopper la
+  contention BLE avec `macro_adminLogin`), le fallback BLE qui surfaçait ces valeurs a été supprimé,
+  mais **aucun flux n'alimentait `_cachedAudio` / `_cachedAutoLock` à la connexion** — seuls
+  `setAudio`/`getAudio`/`calibrate` les remplissaient. `fromTTLock` lisait donc des caches vides
+  (`undefined`) et l'interface n'affichait plus ni l'audio ni l'auto-lock. Un nouveau helper
+  `manager._cacheLockSettings(lock)`, appelé dans `_onLockConnected` après `_saveLockFeatures` (et
+  avant la diffusion de statut), peuple les caches depuis les propriétés **déjà lues par le SDK**
+  (`lock.autoLockTime`, `lock.lockSound`) — **sans nouveau BLE** : le contrat *cache-only* de
+  `fromTTLock` reste intact, mais les valeurs réapparaissent dès la première (re)connexion du monitor
+
+---
+
 ## [2.5.9] — 2026-06-30
 
 ### 🐛 Fixed
