@@ -4,7 +4,7 @@ into the documentation/manifest files that reference them.
 
 Source of truth:
   - Bluetooth Audio Manager: ha-bluetooth-audio-manager/bluetooth_audio_manager/config.yaml
-  - TTLock:                   ttlock-hass-integration/config.json
+  - TTLock:                   ttlock-hass-integration/config.yaml
 
 Targets kept in sync:
   - README.md (root)                     version cells in the add-ons table
@@ -18,7 +18,6 @@ Usage:
 
 from __future__ import annotations
 
-import json
 import re
 import sys
 from pathlib import Path
@@ -27,7 +26,7 @@ ROOT = Path(__file__).resolve().parent.parent
 SEMVER = r"\d+\.\d+\.\d+"
 
 BT_CONFIG = ROOT / "ha-bluetooth-audio-manager/bluetooth_audio_manager/config.yaml"
-TTLOCK_CONFIG = ROOT / "ttlock-hass-integration/config.json"
+TTLOCK_CONFIG = ROOT / "ttlock-hass-integration/config.yaml"
 
 
 def read_yaml_version(path: Path) -> str:
@@ -35,10 +34,6 @@ def read_yaml_version(path: Path) -> str:
     if not m:
         sys.exit(f"No 'version:' found in {path}")
     return m.group(1).strip()
-
-
-def read_json_version(path: Path) -> str:
-    return json.loads(path.read_text())["version"]
 
 
 def set_table_version(text: str, link_marker: str, version: str) -> str:
@@ -56,7 +51,7 @@ def main() -> int:
     check = "--check" in sys.argv[1:]
 
     bt = read_yaml_version(BT_CONFIG)
-    ttlock = read_json_version(TTLOCK_CONFIG)
+    ttlock = read_yaml_version(TTLOCK_CONFIG)
 
     edits: list[tuple[Path, str]] = []
 

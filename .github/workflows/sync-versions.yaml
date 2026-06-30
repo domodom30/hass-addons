@@ -10,7 +10,7 @@ on:
     # the bot's own sync commit never re-triggers this workflow.
     paths:
       - "ha-bluetooth-audio-manager/bluetooth_audio_manager/config.yaml"
-      - "ttlock-hass-integration/config.json"
+      - "ttlock-hass-integration/config.yaml"
       - "scripts/sync_versions.py"
       - ".github/workflows/sync-versions.yaml"
   workflow_dispatch:
