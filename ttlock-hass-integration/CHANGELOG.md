@@ -1,6 +1,24 @@
 # Changelog
 
 
+## [2.6.2] — 2026-07-02
+
+### 💄 Changed
+
+- **Redesigned the operation-log dialog (`LockLogsDialog`)**: the hard-coded
+  "terminal" look (fixed dark background and hex colours) was replaced by a
+  native Vuetify list driven by the app theme, so the journal now renders
+  correctly in both light and dark modes. Each entry uses theme tokens
+  (`success`/`error`/`warning`/`info`) for its type chip and icon; the type
+  filter gained a leading icon per option and the auto-scroll switch a lighter
+  label.
+
+### 🐛 Fixed
+
+- **Bumped `@domodom30/ttlock-sdk-js` to `0.7.3`**.
+
+---
+
 ## [2.6.1] — 2026-06-30
 
 ### 🐛 Fixed

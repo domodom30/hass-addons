@@ -223,6 +223,12 @@ const store = createStore({
         api = new Api(store);
         await api.connect();
         commit('setReady');
+        // Données fictives de développement (opt-in via VITE_MOCK). En build de
+        // prod, import.meta.env.DEV vaut false → bloc et import éliminés.
+        if (import.meta.env.DEV && import.meta.env.VITE_MOCK) {
+          const { installMockData } = await import('../mock/devData');
+          installMockData(store);
+        }
       }
     },
     async scan({ state }) {

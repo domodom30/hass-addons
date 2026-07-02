@@ -20,10 +20,27 @@
           </div>
         </div>
 
-        <v-btn-toggle v-model="filter" density="compact" variant="outlined" divided mandatory>
-          <v-btn value="ALL" size="small" class="text-caption">{{ $t('operations.typeAll') }}</v-btn>
-          <v-btn value="UNLOCK" size="small" class="text-caption">{{ $t('operations.typeUnlock') }}</v-btn>
-          <v-btn value="LOCK" size="small" class="text-caption">{{ $t('operations.typeLock') }}</v-btn>
+        <v-btn-toggle v-model="filter" density="compact" variant="outlined" divided mandatory class="filter-toggle ga-2">
+          <v-btn value="ALL" size="small" variant="tonal">
+            <template #prepend>
+              <v-icon color="warning">mdi-filter-variant</v-icon>
+            </template>
+            {{ $t('operations.typeAll') }}
+          </v-btn>
+
+          <v-btn value="UNLOCK" size="small" variant="tonal">
+            <template #prepend>
+              <v-icon color="success">mdi-lock-open-variant</v-icon>
+            </template>
+            {{ $t('operations.typeUnlock') }}
+          </v-btn>
+
+          <v-btn value="LOCK" size="small" variant="tonal">
+            <template #prepend>
+              <v-icon color="error">mdi-lock</v-icon>
+            </template>
+            {{ $t('operations.typeLock') }}
+          </v-btn>
         </v-btn-toggle>
 
         <v-tooltip :text="$t('common.refresh')" location="bottom">
@@ -31,6 +48,7 @@
             <v-btn
               v-bind="props"
               icon="mdi-refresh"
+              color="primary"
               variant="text"
               size="small"
               :loading="waitingOperations"
@@ -43,24 +61,37 @@
 
       <v-divider />
 
-      <!-- Terminal -->
-      <div ref="terminal" class="terminal flex-grow-1">
-        <div v-if="lines.length === 0" class="terminal-empty">
+      <!-- Journal des opérations -->
+      <div ref="terminal" class="logs-scroll flex-grow-1">
+        <div v-if="lines.length === 0" class="logs-empty">
           <span class="text-medium-emphasis">{{ waitingOperations ? $t('logs.loading') : $t('operations.empty') }}</span>
         </div>
-        <div
-          v-for="(op, i) in lines"
-          :key="i"
-          class="term-line"
-          :class="`term-${op.kind}`"
-        >
-          <v-icon :icon="op.icon" size="14" class="term-icon" :style="{ color: op.iconColor }" />
-          <span class="term-time">{{ op.time }}</span>
-          <span class="term-tag" :class="`tag-${op.kind}`">{{ op.tag }}</span>
-          <span v-if="op.lockName" class="term-lock">{{ op.lockName }}</span>
-          <span class="term-msg">{{ op.message }}</span>
-          <span v-if="op.credential" class="term-cred">{{ op.credential }}</span>
-        </div>
+        <v-list v-else density="compact" bg-color="transparent" class="py-0">
+          <v-list-item
+            v-for="(op, i) in lines"
+            :key="i"
+            class="log-item px-5"
+          >
+            <template #prepend>
+              <v-icon :icon="op.icon" :color="op.color" size="20" class="me-3" />
+            </template>
+
+            <div class="d-flex align-center flex-wrap ga-2">
+              <v-chip :color="op.color" size="x-small" variant="tonal" label class="font-weight-bold">
+                {{ op.tag }}
+              </v-chip>
+              <v-chip v-if="op.lockName" size="x-small" variant="tonal" color="secondary" label>
+                {{ op.lockName }}
+              </v-chip>
+              <span class="text-body-2">{{ op.message }}</span>
+              <span v-if="op.credential" class="text-caption text-medium-emphasis font-mono">{{ op.credential }}</span>
+            </div>
+
+            <template #append>
+              <span class="text-caption text-medium-emphasis font-mono">{{ op.time }}</span>
+            </template>
+          </v-list-item>
+        </v-list>
       </div>
 
       <v-divider />
@@ -69,12 +100,15 @@
         <v-spacer />
         <v-switch
           v-model="autoScroll"
-          :label="$t('logs.autoScroll')"
           true-icon="mdi-check"
           false-icon="mdi-close"
           hide-details
           color="info"
-        />
+        >
+          <template #label>
+            <span class="text-caption text-medium-emphasis">{{ $t('logs.autoScroll') }}</span>
+          </template>
+        </v-switch>
       </div>
     </v-card>
   </v-dialog>
@@ -105,8 +139,7 @@ export default {
       const lock = this.$store.state.locks.find(l => l.address === this.address)
       return lock?.name || this.address
     },
-    // Opérations brutes (une serrure ou agrégées), triées de l'ancien au récent
-    // pour un défilement de type terminal (le plus récent en bas).
+
     rawOperations() {
       const ops = this.$store.state.operations
       const collected = []
@@ -134,11 +167,11 @@ export default {
         FAILED: "failed",
       }
       const ICONS = {
-        unlock: { icon: 'mdi-lock-open-variant',   color: '#22c55e' },
-        lock:   { icon: 'mdi-lock',                color: '#f87171' },
-        alarm:  { icon: 'mdi-bell-alert',          color: '#fbbf24' },
-        failed: { icon: 'mdi-alert-circle',        color: '#fb923c' },
-        other:  { icon: 'mdi-information-outline', color: '#60a5fa' },
+        unlock: { icon: 'mdi-lock-open-variant',   color: 'success' },
+        lock:   { icon: 'mdi-lock',                color: 'error' },
+        alarm:  { icon: 'mdi-bell-alert',          color: 'warning' },
+        failed: { icon: 'mdi-alert-circle',        color: 'warning' },
+        other:  { icon: 'mdi-information-outline', color: 'info' },
       }
       return this.rawOperations
         .filter(op => this.filter === "ALL" || op.recordTypeCategory === this.filter)
@@ -151,8 +184,8 @@ export default {
           return {
             kind,
             icon: ICONS[kind].icon,
-            iconColor: ICONS[kind].color,
-            tag: (op.recordTypeCategory || "OTHER").padEnd(6, " "),
+            color: ICONS[kind].color,
+            tag: op.recordTypeCategory || "OTHER",
             time: m.isValid() ? m.format("DD-MM HH:mm:ss") : "—",
             lockName: op._lockName,
             message: op.recordTypeName || "—",
@@ -207,49 +240,19 @@ export default {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-size: 0.72rem;
 }
-.terminal {
-  overflow-y: auto;
-  background: #0b0f14;
-  color: #d6deeb;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  font-size: 0.8rem;
-  line-height: 1.55;
-  padding: 14px 18px;
+.filter-toggle :deep(.v-btn) {
+  padding-inline: 12px;
 }
-.terminal-empty {
+.logs-scroll {
+  overflow-y: auto;
+}
+.logs-empty {
   height: 100%;
   display: flex;
   align-items: center;
   justify-content: center;
 }
-.term-line {
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-.term-time {
-  color: #5f7e97;
-  margin-right: 10px;
-}
-.term-tag {
-  display: inline-block;
-  margin-right: 10px;
-  font-weight: 700;
-  white-space: pre;
-}
-.tag-unlock { color: #22c55e; }
-.tag-lock   { color: #f87171; }
-.tag-alarm  { color: #fbbf24; }
-.tag-failed { color: #fb923c; }
-.tag-other  { color: #60a5fa; }
-.term-icon  { margin-right: 6px; vertical-align: middle; }
-.term-lock {
-  color: #c792ea;
-  margin-right: 10px;
-}
-.term-msg { color: #d6deeb; }
-.term-cred {
-  color: #8aa0b3;
-  margin-left: 8px;
-  font-style: italic;
+.log-item {
+  border-bottom: thin solid rgba(var(--v-border-color), var(--v-border-opacity));
 }
 </style>

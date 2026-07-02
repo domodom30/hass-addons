@@ -188,8 +188,7 @@ export default {
     async saveCard() {
       if (this.busy) return
       this.busy = true
-      // Vuetify 3 v-date-picker / v-time-picker may emit Date objects (not strings)
-      // once the user interacts with them — coerce defensively.
+
       const fmt = (date, time) => {
         const d = date instanceof Date ? moment(date).format("YYYY-MM-DD") : (date || "")
         const t = time instanceof Date ? moment(time).format("HH:mm") : (time || "")

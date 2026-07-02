@@ -239,16 +239,16 @@ export default {
     loadForAddress() {
       if (!this.lock.name) return
       this.$store.commit("setActiveLockAddress", this.lock.address)
-      // Reset to loading state
+
       this.passcodes = -1
       this.cards = -1
       this.fingers = -1
       this.$store.dispatch("readCredentials", this.lock.address)
-      // Pick the first available tab based on lock features
+
       if (this.lock.hasPasscode) this.tab = 'pins'
       else if (this.lock.hasCard) this.tab = 'cards'
       else if (this.lock.hasFinger) this.tab = 'fingers'
-      // Hydrate any data already in the store for this address
+
       const cached = this.$store.state.passcodes[this.address]
       if (cached !== undefined) this.passcodes = cached
       const cardsCached = this.$store.state.cards[this.address]
