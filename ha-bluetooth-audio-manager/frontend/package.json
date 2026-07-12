@@ -1,6 +1,6 @@
 {
   "name": "bt-audio-manager-frontend",
-  "version": "3.3.5",
+  "version": "3.3.6",
   "description": "Vue 3 + Vuetify frontend for the Home Assistant Bluetooth Audio Manager add-on",
   "type": "module",
   "private": true,
