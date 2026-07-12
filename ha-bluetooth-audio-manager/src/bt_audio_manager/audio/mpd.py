@@ -39,12 +39,17 @@ class MPDManager:
         self._port = port
         self._speaker_name = speaker_name
         self._password = password
-        # When True, drive the speaker's real hardware/AVRCP volume: MPD uses a
-        # "hardware" mixer (setvol == the PulseAudio sink volume) and keeps the
-        # output open (always_on) so setvol works even while idle — otherwise a
-        # closed output makes setvol fail with "All outputs are disabled". When
-        # False, MPD uses a "software" mixer (attenuates its own stream, always
-        # idle-safe) and leaves the sink/AVRCP level untouched.
+        # When True, drive the speaker's real hardware/AVRCP volume. MPD uses a
+        # "null" mixer: setvol only stores a value (no audio attenuation) and the
+        # mixer is always available — even while idle and with no stream open — so
+        # HA's MPD entity always exposes VOLUME_SET/STEP/MUTE. The stored value is
+        # bridged to the PulseAudio sink (AVRCP absolute volume) via the
+        # on_volume_change callback: MPD's documented "external mixer" pattern. A
+        # "hardware" (pulse) mixer can't be used here because it controls MPD's
+        # sink-input and goes offline whenever the output isn't open, which drops
+        # the volume field from status and makes HA hide volume_up/down. When
+        # False, MPD uses a "software" mixer (attenuates its own stream, idle-safe)
+        # and leaves the sink/AVRCP level untouched.
         self._volume_hardware = volume_hardware
         # Map app log level to MPD log level:
         # debug → "verbose" (full client/command chatter)
@@ -164,9 +169,10 @@ class MPDManager:
             speaker_name=self._speaker_name.replace("\\", "\\\\").replace('"', '\\"'),
             sink=self._sink_name.replace("\\", "\\\\").replace('"', '\\"'),
             mpd_log_level=self._mpd_log_level,
-            mixer_type="hardware" if self._volume_hardware else "software",
-            # always_on keeps the output (and its hardware mixer) open so setvol
-            # never fails with "All outputs are disabled" while idle.
+            mixer_type="null" if self._volume_hardware else "software",
+            # always_on keeps the output warm across idle cycles so playback
+            # resumes without a reopen delay. The null mixer is always available,
+            # so setvol never fails with "All outputs are disabled" while idle.
             always_on_line='\n    always_on   "yes"' if self._volume_hardware else "",
         )
 

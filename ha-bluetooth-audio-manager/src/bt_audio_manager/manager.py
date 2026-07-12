@@ -2825,8 +2825,8 @@ class BluetoothAudioManager:
         if addr and self.store:
             settings = self.store.get_device_settings(addr)
             if settings.get("mpd_volume_hardware"):
-                # Hardware-volume mode keeps MPD's output open (always_on) so the
-                # hardware mixer stays reachable for setvol; suspending or
+                # Hardware-volume mode keeps MPD's output open (always_on) so
+                # playback resumes without a reopen delay; suspending or
                 # disconnecting the sink would defeat that, so skip power-save.
                 logger.info(
                     "Sink idle for %s — power-save skipped (hardware-volume mode)",

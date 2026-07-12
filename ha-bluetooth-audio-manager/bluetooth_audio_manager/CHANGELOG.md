@@ -1,3 +1,22 @@
+## [3.3.6] — 2026-07-12
+
+### 🐛 Fixed
+
+- **Hardware volume mode now supports `volume_up`/`volume_down` and reliably
+  moves the speaker**: with "Piloter le volume matériel de l'enceinte" enabled,
+  the MPD media_player entity dropped its volume controls whenever the speaker
+  was connected but idle, so `media_player.volume_up`/`volume_down` failed with
+  "entity does not support the action". The mode used MPD's `hardware` (pulse)
+  mixer, which controls MPD's own stream and goes offline whenever no audio is
+  playing — removing the `volume` field from MPD's status and making Home
+  Assistant hide the volume features. It now uses MPD's `null` mixer (the
+  documented "external mixer" pattern): the volume is always reported, so HA
+  always exposes `VOLUME_SET`/`VOLUME_STEP`/`VOLUME_MUTE`, and each change is
+  bridged to the PulseAudio sink (AVRCP absolute volume) so the speaker's real
+  level tracks it — with no double attenuation.
+
+---
+
 ## [3.3.5] — 2026-06-29
 
 ### 🐛 Fixed
