@@ -2311,7 +2311,14 @@ class Manager extends EventEmitter {
       // timeout so the SDK loop exits via its `if(!isConnected) break` path and the
       // mutex is released.
       let timeoutHandle;
-      const operationsPromise = lock.getOperationLog();
+      // Lecture COMPLÈTE (all=true) : le flux « new events » 0xffff du firmware ne renvoie
+      // PAS les enregistrements nouvellement ajoutés (cf. SDK TTLock.js — « New (appended)
+      // records are ONLY surfaced [par le probe au-delà de maxRecordNumber] : the 0xffff
+      // Phase 1 does not return them »). En all=false, le chemin automatique ne captait
+      // jamais les opérations postérieures au dernier record connu → journal et capteurs
+      // MQTT figés. all=true probe au-delà du max (exécuté AVANT le backfill, donc robuste
+      // aux déconnexions rapides de la serrure) et retourne le journal complet dense.
+      const operationsPromise = lock.getOperationLog(true, false);
       const timeoutPromise = new Promise((_, reject) => {
         timeoutHandle = setTimeout(async () => {
           console.warn(`_processOperationLog [${lock.getAddress()}]: lecture oplog bloquée (CRC corrompu?) — déconnexion forcée`);
@@ -2358,27 +2365,39 @@ class Manager extends EventEmitter {
       // Sans resynchronisation, toutes les nouvelles ops (recordNumber <= seuil) seraient
       // filtrées à jamais et les capteurs HA last_operation/last_access resteraient figés.
       // On remet le seuil à 0 pour retraiter la lecture courante comme entièrement nouvelle.
-      const recordNumbers = operations
-        .map(op => op && op.recordNumber)
-        .filter(n => typeof n === 'number');
-      const maxObserved = recordNumbers.length ? Math.max(...recordNumbers) : 0;
-      if (recordNumbers.length && maxObserved < threshold) {
+      // reduce plutôt que Math.max(...spread) : all=true retourne le journal complet
+      // (potentiellement des milliers d'entrées), au-delà de la limite d'arguments du spread.
+      let maxObserved = 0;
+      let sawRecord = false;
+      for (const op of operations) {
+        if (op && typeof op.recordNumber === 'number') {
+          sawRecord = true;
+          if (op.recordNumber > maxObserved) maxObserved = op.recordNumber;
+        }
+      }
+      if (sawRecord && maxObserved < threshold) {
         console.warn(`_processOperationLog [${lock.getAddress()}]: recordNumber max ${maxObserved} < seuil ${threshold} — reset serrure détecté, resynchronisation du seuil à 0`);
         threshold = 0;
         lock._lastProcessedRecordNumber = 0;
         store.setLastProcessedRecord(lock.getAddress(), 0);
       }
       const newOps = operations.filter(op => op.recordNumber > threshold);
-      const opSummary = operations.map(op => `#${op.recordNumber} type=${op.recordType}`).join(', ');
+      // Résumé borné aux NOUVELLES opérations : all=true retourne le journal complet
+      // (jusqu'à MAX_OPLOG entrées), on ne veut pas déballer tout ça à chaque cycle.
+      const totalOps = operations.filter(Boolean).length;
       if (newOps.length > 0) {
-        const maxRecord = Math.max(...newOps.map(op => op.recordNumber));
+        const maxRecord = newOps.reduce((m, op) => (op.recordNumber > m ? op.recordNumber : m), 0);
         lock._lastProcessedRecordNumber = maxRecord;
         store.setLastProcessedRecord(lock.getAddress(), maxRecord);
+        const newSummary = newOps
+          .slice(0, 10)
+          .map(op => `#${op.recordNumber} type=${op.recordType}`)
+          .join(', ') + (newOps.length > 10 ? ', …' : '');
         console.log('_processOperationLog: succès pour', lock.getAddress(),
-          `(${operations.length} op(s): ${opSummary}, ${newOps.length} nouvelles)`);
+          `(journal ${totalOps} op(s), ${newOps.length} nouvelle(s): ${newSummary})`);
       } else {
         console.log('_processOperationLog: succès pour', lock.getAddress(),
-          `(${operations.length} op(s): ${opSummary}, aucune nouvelle — déjà traitées)`);
+          `(journal ${totalOps} op(s), aucune nouvelle)`);
       }
       // Émettre un évènement par NOUVELLE opération (ordre chronologique = recordNumber
       // croissant) pour l'entité HA `event` — historique/automation par opération.

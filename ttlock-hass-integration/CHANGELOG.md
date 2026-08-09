@@ -1,6 +1,22 @@
 # Changelog
 
 
+## [2.6.4] — 2026-08-09
+
+### 🐛 Fixed
+
+- **New operations are captured again automatically**: the background reader
+  (`_processOperationLog`) now performs a full log read (`all=true`) instead of
+  the "new events" (`0xffff`) read. The lock firmware never returns freshly
+  appended records through the `0xffff` stream — only a full read probes beyond
+  the last known record number — so newly recorded operations were no longer
+  reaching the journal, the MQTT `last_operation` / `last_access` sensors, nor
+  the `event` entity until a manual **Refresh**. They now flow in on their own
+  (throttled by `oplog_cooldown`). The log line was trimmed to the new records
+  only, and the max-record computation made safe for large journals.
+
+---
+
 ## [2.6.3] — 2026-08-09
 
 ### ✨ Added
