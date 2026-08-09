@@ -41,4 +41,6 @@ ignore_crc: true // ignore bad CRC in responses from lock
 debug_communication: true // log BLE communication messages to and from the lock
 debug_mqtt: true // log MQTT messages sent and received
 gateway_debug: true // log websocket messages to and from the gateway
+lock_offline_timeout: 15 // minutes without BLE contact before a lock's MQTT entities are marked unavailable (default 15)
+max_oplog: 300 // maximum number of operation-log entries kept in the persisted journal (default 300)
 ```

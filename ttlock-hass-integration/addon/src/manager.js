@@ -106,6 +106,17 @@ class Manager extends EventEmitter {
     this._ensuringMonitor = false;
     /** @type {boolean} true between a successful rebootEsp32() call and the next 'connected' event */
     this._esp32RebootPending = false;
+    /**
+     * @type {Map<string, number>} address → epoch ms of the last BLE contact (raw
+     * advertisement or successful connect). Feeds the reachability watchdog below —
+     * the only signal that drives the per-lock MQTT availability topic back to
+     * 'offline' (see ha.js _onLockOffline / mqttTopics lockAvailabilityTopic).
+     */
+    this._lastSeen = new Map();
+    /** @type {Set<string>} addresses currently published as MQTT-offline (avoids duplicate emits) */
+    this._offlineLocks = new Set();
+    /** @type {NodeJS.Timeout|undefined} periodic lock-reachability watchdog */
+    this._lockOfflineWatchdog = undefined;
   }
 
   async init() {
@@ -163,6 +174,7 @@ class Manager extends EventEmitter {
         if (this.gateway === 'noble') {
           this._attachGatewayWatchdog();
         }
+        this._startLockOfflineWatchdog();
       } catch (error) {
         console.log(error);
         this.startupStatus = 1;
@@ -1374,8 +1386,15 @@ class Manager extends EventEmitter {
     try {
       const res = await lock.resetLock();
       if (res) {
+        // Reset serrure : le compteur d'enregistrements firmware repartira de 0 au
+        // ré-appairage. Remettre le seuil de déduplication à 0 pour ne pas ignorer les
+        // futures opérations (recordNumber <= ancien seuil). Voir aussi la détection de
+        // régression dans _processOperationLog (reset hors addon / remplacement serrure).
+        store.setLastProcessedRecord(address, 0);
         lock.removeAllListeners();
         this.pairedLocks.delete(address);
+        this._lastSeen.delete(address);
+        this._offlineLocks.delete(address);
         this.emit('lockUnpaired', lock);
         this.emit('lockListChanged');
       }
@@ -1876,6 +1895,55 @@ class Manager extends EventEmitter {
   }
 
   /**
+   * Record BLE contact (raw advertisement or a successful connect) for a lock, and
+   * clear its offline flag — emitting `lockOnline` — if the reachability watchdog had
+   * previously marked it unreachable.
+   * @param {import('ttlock-sdk-js').TTLock} lock
+   */
+  _touchLastSeen(lock) {
+    const address = lock.getAddress();
+    this._lastSeen.set(address, Date.now());
+    if (this._offlineLocks.delete(address)) {
+      console.log('[Availability] Lock back in range:', address);
+      this.emit('lockOnline', lock);
+    }
+  }
+
+  /**
+   * Periodically mark paired locks unreachable when no BLE contact has been seen
+   * within the configurable timeout. Nothing in the codebase ever flipped the
+   * per-lock MQTT availability topic to 'offline' before this — a lock going out of
+   * range or dying kept its retained 'online' payload forever, so Home Assistant
+   * showed stale battery/rssi/state values as permanently available. Timeout is set
+   * via the addon option `lock_offline_timeout` (minutes, env LOCK_OFFLINE_TIMEOUT),
+   * default 15 — matches the `oplog_cooldown` env-driven-option pattern already used
+   * for _handleNewEventsUpdate.
+   *
+   * Skips locks with a BLE operation in flight (isLockBusy/waitingForConnect) so a
+   * long read (e.g. the 120 s getOperationLog timeout) never gets mistaken for
+   * unreachability.
+   */
+  _startLockOfflineWatchdog() {
+    if (this._lockOfflineWatchdog) return;
+    const CHECK_INTERVAL_MS = 60 * 1000;
+    this._lockOfflineWatchdog = setInterval(() => {
+      const timeoutMs = (parseInt(process.env.LOCK_OFFLINE_TIMEOUT, 10) || 15) * 60 * 1000;
+      const now = Date.now();
+      for (const [address, lock] of this.pairedLocks) {
+        if (this.isLockBusy(address) || this._offlineLocks.has(address)) continue;
+        const lastSeen = this._lastSeen.get(address);
+        if (lastSeen === undefined || now - lastSeen <= timeoutMs) continue;
+        this._offlineLocks.add(address);
+        console.warn(`[Availability] Lock ${address} unreachable for ${Math.round((now - lastSeen) / 1000)}s — marking offline`);
+        this.emit('lockOffline', lock);
+      }
+    }, CHECK_INTERVAL_MS);
+    if (typeof this._lockOfflineWatchdog.unref === 'function') {
+      this._lockOfflineWatchdog.unref();
+    }
+  }
+
+  /**
    *
    * @param {import('ttlock-sdk-js').TTLock} lock
    */
@@ -1888,6 +1956,16 @@ class Manager extends EventEmitter {
     lock.on('scanICStart', () => this.emit('lockCardScan', lock));
     lock.on('scanFRStart', () => this.emit('lockFingerScan', lock));
     lock.on('scanFRProgress', () => this.emit('lockFingerScanProgress', lock));
+    // Reachability heartbeat: the low-level BLE device re-emits 'updated' on every raw
+    // advertisement (unlike the TTLock-level 'updated' bound above, which only fires
+    // when battery/lockedStatus/newEvents actually changed) — the only signal available
+    // for "still in range" between real state changes. Reached via internal coupling,
+    // like _attachGatewayWatchdog; feature-detected so an SDK shape change degrades to
+    // "no heartbeat" (offline watchdog stays inert for this lock) instead of a crash.
+    if (lock.device && typeof lock.device.on === 'function') {
+      lock.device.on('updated', () => this._touchLastSeen(lock));
+    }
+    this._touchLastSeen(lock);
   }
 
   /**
@@ -1897,6 +1975,7 @@ class Manager extends EventEmitter {
   async _onLockConnected(lock) {
     if (lock.isPaired()) {
       this.pairedLocks.set(lock.getAddress(), lock);
+      this._touchLastSeen(lock);
       console.log('Connected to paired lock ' + lock.getAddress());
       // One-time migration: persist deviceInfo if not yet stored (locks paired before v1.4.0)
       // Only run during initial monitor connects — NOT during user operations (would cause
@@ -2272,7 +2351,23 @@ class Manager extends EventEmitter {
       if (lock._lastProcessedRecordNumber === undefined) {
         lock._lastProcessedRecordNumber = store.getLastProcessedRecord(lock.getAddress());
       }
-      const threshold = lock._lastProcessedRecordNumber;
+      let threshold = lock._lastProcessedRecordNumber;
+      // Détection d'un reset serrure (via l'addon, l'app TTLock officielle ou un
+      // remplacement du matériel) : le compteur d'enregistrements firmware repart de 0,
+      // donc le recordNumber le plus élevé observé devient INFÉRIEUR au seuil mémorisé.
+      // Sans resynchronisation, toutes les nouvelles ops (recordNumber <= seuil) seraient
+      // filtrées à jamais et les capteurs HA last_operation/last_access resteraient figés.
+      // On remet le seuil à 0 pour retraiter la lecture courante comme entièrement nouvelle.
+      const recordNumbers = operations
+        .map(op => op && op.recordNumber)
+        .filter(n => typeof n === 'number');
+      const maxObserved = recordNumbers.length ? Math.max(...recordNumbers) : 0;
+      if (recordNumbers.length && maxObserved < threshold) {
+        console.warn(`_processOperationLog [${lock.getAddress()}]: recordNumber max ${maxObserved} < seuil ${threshold} — reset serrure détecté, resynchronisation du seuil à 0`);
+        threshold = 0;
+        lock._lastProcessedRecordNumber = 0;
+        store.setLastProcessedRecord(lock.getAddress(), 0);
+      }
       const newOps = operations.filter(op => op.recordNumber > threshold);
       const opSummary = operations.map(op => `#${op.recordNumber} type=${op.recordType}`).join(', ');
       if (newOps.length > 0) {
@@ -2284,6 +2379,14 @@ class Manager extends EventEmitter {
       } else {
         console.log('_processOperationLog: succès pour', lock.getAddress(),
           `(${operations.length} op(s): ${opSummary}, aucune nouvelle — déjà traitées)`);
+      }
+      // Émettre un évènement par NOUVELLE opération (ordre chronologique = recordNumber
+      // croissant) pour l'entité HA `event` — historique/automation par opération.
+      // On enrichit un CLONE (recordTypeName/category/passwordName) sans muter le cache
+      // SDK, qui serait sinon persisté enrichi puis re-enrichi (cf. getPersistedOperationLog).
+      const chronological = [...newOps].sort((a, b) => a.recordNumber - b.recordNumber);
+      for (const op of chronological) {
+        this.emit('lockOperation', lock, this._enrichOperation(structuredClone(op)));
       }
       // Émettre une seule fois pour l'état final des NOUVELLES opérations uniquement.
       let lastStatus = LockedStatus.UNKNOWN;

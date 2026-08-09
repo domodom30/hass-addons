@@ -207,16 +207,16 @@ export default {
     },
   },
   methods: {
-    loadOperations() {
+    loadOperations(reload = false) {
       const addresses = this.address
         ? [this.address]
         : this.$store.state.locks.filter(l => l.paired).map(l => l.address)
       for (const addr of addresses) {
-        this.$store.dispatch("readOperations", addr)
+        this.$store.dispatch("readOperations", { address: addr, reload })
       }
     },
     refresh() {
-      this.loadOperations()
+      this.loadOperations(true)
     },
     close() {
       this.$store.commit("clearOverlay")

@@ -216,13 +216,14 @@ class Api {
     );
   }
 
-  async requestOperations(address) {
+  async requestOperations(address, reload = false) {
     this._rememberPending('operations', address);
     this.ws.send(
       JSON.stringify({
         type: 'operations',
         data: {
-          address: address
+          address: address,
+          reload: reload
         }
       })
     );

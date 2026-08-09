@@ -1,6 +1,66 @@
 # Changelog
 
 
+## [2.6.3] — 2026-08-09
+
+### ✨ Added
+
+- **Offline detection for locks (`lock_offline_timeout` option)**: a reachability
+  watchdog now marks a lock's MQTT entities as *unavailable* after N minutes
+  without BLE contact (default 15, configurable). The manager emits `lockOffline`
+  / `lockOnline` events that drive the per-lock availability topic, so Home
+  Assistant reflects a lock that has gone out of range instead of showing a stale
+  state.
+- **Discovery `origin` block**: every MQTT discovery payload now carries an
+  `origin` (name, `sw_version`, support URL), per the HA 2023.8+ convention, so
+  the entities are attributed to this integration on the device page.
+- **Operation `event` entity**: each lock now exposes an HA `event` entity that
+  fires once per new operation (`event_types`: unlock / lock / failed / alarm /
+  other), so automations can react per operation and HA keeps a history —
+  complementing the retained `last_operation` / `last_access` sensors which only
+  hold the latest state.
+- **Configurable journal size (`max_oplog` option)**: the number of operation-log
+  entries kept in the persisted journal is now configurable (default 300).
+
+### 💄 Changed
+
+- **Instant operation-log dialog**: opening the journal now renders immediately
+  from the persisted cache instead of forcing a BLE read. A fresh BLE fetch only
+  happens on an explicit **Refresh** — so opening the log no longer holds the BLE
+  radio (and no longer blocks lock/unlock commands from HA for up to 120 s) when
+  the lock is out of range.
+- **Diagnostic sensors**: `battery`, `rssi` and `connectivity` moved to
+  `entity_category: diagnostic`; added `state_class: measurement`, a proper
+  `signal_strength` device class for RSSI (now in dBm), and `qos: 1` on all
+  discovery entities.
+- **`last_operation` attribute renamed**: the historical battery level in the
+  operation payload is now `battery_at_event` (was `battery`), so it is never
+  confused with the live battery sensor.
+
+### 🐛 Fixed
+
+- **Operation-log dedup survives a lock reset**: the deduplication threshold is
+  now reset when a lock is reset (via the addon or the official TTLock app) or
+  re-paired. Previously, once the firmware record counter restarted from 0, all
+  new operations were filtered out and the `last_operation` / `last_access`
+  sensors stayed frozen.
+- **DST-correct operation timestamps**: the `*_time` sensors now use an offset
+  computed from the operation's own date (the addon aligns its clock to Home
+  Assistant's timezone), instead of appending the *current* offset — fixing a
+  1 h drift for operations recorded on the other side of a DST change.
+- **No display shrink on manual refresh**: a partial BLE read is now merged with
+  the cache by `recordNumber` instead of replacing it, so refreshing the log
+  never drops already-shown entries.
+- **No spurious re-publish on restart**: the last published operation/unlock
+  record is now persisted, so restarting the addon no longer re-publishes the
+  latest event (which could re-trigger HA automations).
+- **Robust operation-log persistence**: `lockData.json` is now always written
+  dense (no more stray `null` entries from the SDK's sparse array) and
+  re-indexed by `recordNumber` on load, so the SDK no longer re-scans the whole
+  journal on restart.
+
+---
+
 ## [2.6.2] — 2026-07-02
 
 ### 💄 Changed

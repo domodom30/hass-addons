@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import mqtt from 'async-mqtt';
 import manager from './manager.js';
 import store from './store.js';
@@ -13,12 +14,20 @@ import {
   lockAvailabilityTopic,
   lastOperationTopic,
   lastUnlockTopic,
+  operationEventTopic,
   discoveryConfigTopic,
   parseCommandTopic,
   latestOperation,
   latestUnlock,
-  buildLastOperationPayload
+  buildLastOperationPayload,
+  buildOperationEventPayload,
+  OPERATION_EVENT_TYPES
 } from './mqttTopics.js';
+
+// Read once at module load — used to populate the discovery `origin` block (HA
+// convention since 2023.8: attributes entities to the integration that created them,
+// shown on the device page). package.json is always present alongside this file.
+const ADDON_VERSION = JSON.parse(readFileSync(new URL('../package.json', import.meta.url))).version;
 
 class HomeAssistant {
   /**
@@ -37,20 +46,6 @@ class HomeAssistant {
     this.discovery_prefix = options.discovery_prefix || 'homeassistant';
     /** @type {Map<string, string>} address → last published name (alias or SDK name) */
     this.configuredLocks = new Map();
-    /**
-     * Déduplication des publications retained pour last_operation / last_access.
-     * Clé : adresse MAC ; Valeur : recordNumber du dernier payload publié.
-     * Réinitialisée à chaque redémarrage de l'addon → la première connexion MQTT
-     * de la session publie toujours (cas redémarrage du broker). Les reconnexions
-     * suivantes (session identique, recordNumber inchangé) sautent la publication
-     * pour éviter que HA enregistre un faux changement d'état à l'heure de
-     * reconnexion.
-     * @type {Map<string, number|null>}
-     */
-    this._lastPublishedOpRecord = new Map();
-    /** @type {Map<string, number|null>} */
-    this._lastPublishedUnlockRecord = new Map();
-
     this.connected = false;
     this._connecting = false;
     this._reconnectTimer = null;
@@ -62,6 +57,9 @@ class HomeAssistant {
     manager.on('lockUpdated', this._onLockBatteryUpdated.bind(this));
     manager.on('lockUnpaired', this._onLockUnpaired.bind(this));
     manager.on('lockStateUpdated', this._onLockStateUpdated.bind(this));
+    manager.on('lockOffline', this._onLockOffline.bind(this));
+    manager.on('lockOnline', this._onLockOnline.bind(this));
+    manager.on('lockOperation', this._onLockOperation.bind(this));
   }
 
   /** Schedule a single reconnection attempt (guarded against duplicates). */
@@ -170,6 +168,20 @@ class HomeAssistant {
   }
 
   /**
+   * `origin` block shared by every discovery payload (HA convention since 2023.8) —
+   * attributes the entities to this integration on the device/entity info page.
+   */
+  _origin() {
+    return {
+      origin: {
+        name: 'TTLock Home Assistant Integration',
+        sw_version: ADDON_VERSION,
+        support_url: 'https://github.com/domodom30/hass-addons/issues'
+      }
+    };
+  }
+
+  /**
    * Configure a lock device in HA
    * @param {import('ttlock-sdk-js').TTLock} lock
    * @param {boolean} [force] republish discovery even if already configured
@@ -183,6 +195,7 @@ class HomeAssistant {
     const id = lockIdFromAddress(address);
     const device = this._buildDevice(lock, id);
     const avail = this._hybridAvailability(id);
+    const origin = this._origin();
 
     const entities = [
       {
@@ -202,7 +215,8 @@ class HomeAssistant {
           optimistic: false,
           retain: false,
           qos: 1,
-          ...avail
+          ...avail,
+          ...origin
         }
       },
       {
@@ -213,10 +227,14 @@ class HomeAssistant {
           name: name + ' Battery',
           device: device,
           device_class: 'battery',
+          state_class: 'measurement',
+          entity_category: 'diagnostic',
           unit_of_measurement: '%',
           state_topic: stateTopic(id),
           value_template: '{{ value_json.battery }}',
-          ...avail
+          qos: 1,
+          ...avail,
+          ...origin
         }
       },
       {
@@ -226,11 +244,16 @@ class HomeAssistant {
           unique_id: 'ttlock_' + id + '_rssi',
           name: name + ' RSSI',
           device: device,
-          unit_of_measurement: 'dB',
+          device_class: 'signal_strength',
+          state_class: 'measurement',
+          entity_category: 'diagnostic',
+          unit_of_measurement: 'dBm',
           icon: 'mdi:signal',
           state_topic: stateTopic(id),
           value_template: '{{ value_json.rssi }}',
-          ...avail
+          qos: 1,
+          ...avail,
+          ...origin
         }
       },
       {
@@ -244,7 +267,9 @@ class HomeAssistant {
           state_topic: lastOperationTopic(id),
           value_template: '{{ value_json.event }}',
           json_attributes_topic: lastOperationTopic(id),
-          ...avail
+          qos: 1,
+          ...avail,
+          ...origin
         }
       },
       {
@@ -258,7 +283,9 @@ class HomeAssistant {
           state_topic: lastUnlockTopic(id),
           value_template: '{{ value_json.event }}',
           json_attributes_topic: lastUnlockTopic(id),
-          ...avail
+          qos: 1,
+          ...avail,
+          ...origin
         }
       },
       {
@@ -270,14 +297,15 @@ class HomeAssistant {
           device: device,
           device_class: 'timestamp',
           icon: 'mdi:clock-check',
-          // Même topic que last_operation — extrait timestamp (ISO 8601).
-          // On vérifie que c'est bien une string ISO (contient '-') pour rejeter
-          // les anciens messages retained au format entier compact YYYYMMDDHHmmss.
-          // On ajoute le décalage horaire local de HA (ex. +02:00) car HA exige
-          // un datetime timezone-aware pour device_class: timestamp.
+          // Même topic que last_operation. Le backend émet désormais un ISO 8601
+          // déjà timezone-aware (offset DST-correct calculé à la date de l'op), donc
+          // on le passe tel quel. Le garde `[-6] in ['+','-']` rejette les anciens
+          // messages retained sans offset ('…:57:51') et le format entier compact.
           state_topic: lastOperationTopic(id),
-          value_template: "{{ value_json.timestamp ~ (now() | string)[-6:] if value_json.timestamp is string and '-' in value_json.timestamp else None }}",
-          ...avail
+          value_template: "{{ value_json.timestamp if value_json.timestamp is string and value_json.timestamp[-6] in ['+', '-'] else None }}",
+          qos: 1,
+          ...avail,
+          ...origin
         }
       },
       {
@@ -289,10 +317,12 @@ class HomeAssistant {
           device: device,
           device_class: 'timestamp',
           icon: 'mdi:clock-check-outline',
-          // Même logique que last_operation_time.
+          // Même logique que last_operation_time (ISO déjà timezone-aware).
           state_topic: lastUnlockTopic(id),
-          value_template: "{{ value_json.timestamp ~ (now() | string)[-6:] if value_json.timestamp is string and '-' in value_json.timestamp else None }}",
-          ...avail
+          value_template: "{{ value_json.timestamp if value_json.timestamp is string and value_json.timestamp[-6] in ['+', '-'] else None }}",
+          qos: 1,
+          ...avail,
+          ...origin
         }
       },
       {
@@ -306,7 +336,26 @@ class HomeAssistant {
           state_topic: lastUnlockTopic(id),
           value_template: "{{ value_json.by if value_json.by else '—' }}",
           json_attributes_topic: lastUnlockTopic(id),
-          ...avail
+          qos: 1,
+          ...avail,
+          ...origin
+        }
+      },
+      {
+        component: 'event',
+        objectId: 'operation',
+        payload: {
+          unique_id: 'ttlock_' + id + '_operation',
+          name: name + ' Operation',
+          device: device,
+          icon: 'mdi:gesture-tap',
+          state_topic: operationEventTopic(id),
+          event_types: OPERATION_EVENT_TYPES,
+          value_template: '{{ value_json.event_type }}',
+          json_attributes_topic: operationEventTopic(id),
+          qos: 1,
+          ...avail,
+          ...origin
         }
       },
       {
@@ -317,21 +366,27 @@ class HomeAssistant {
           name: name + ' Connectivity',
           device: device,
           device_class: 'connectivity',
+          entity_category: 'diagnostic',
           state_topic: lockAvailabilityTopic(id),
           payload_on: PAYLOAD_ONLINE,
           payload_off: PAYLOAD_OFFLINE,
+          qos: 1,
           // Depends on the bridge only so it stays visible/historised even
           // when the lock itself is offline.
-          availability: [{ topic: BRIDGE_AVAILABILITY_TOPIC, payload_available: PAYLOAD_ONLINE, payload_not_available: PAYLOAD_OFFLINE }]
+          availability: [{ topic: BRIDGE_AVAILABILITY_TOPIC, payload_available: PAYLOAD_ONLINE, payload_not_available: PAYLOAD_OFFLINE }],
+          ...origin
         }
       }
     ];
 
-    for (const entity of entities) {
-      await this._publish(discoveryConfigTopic(this.discovery_prefix, entity.component, id, entity.objectId), entity.payload, { retain: true, qos: 1 });
+    try {
+      for (const entity of entities) {
+        await this._publish(discoveryConfigTopic(this.discovery_prefix, entity.component, id, entity.objectId), entity.payload, { retain: true, qos: 1 });
+      }
+      this.configuredLocks.set(address, name);
+    } catch (error) {
+      console.error('MQTT configureLock error:', error.message);
     }
-
-    this.configuredLocks.set(address, name);
   }
 
   /**
@@ -378,11 +433,15 @@ class HomeAssistant {
    */
   async publishLockAvailability(lock, online) {
     if (!this.connected) return;
-    const id = lockIdFromAddress(lock.getAddress());
-    await this._publish(lockAvailabilityTopic(id), online ? PAYLOAD_ONLINE : PAYLOAD_OFFLINE, {
-      retain: true,
-      qos: 1
-    });
+    try {
+      const id = lockIdFromAddress(lock.getAddress());
+      await this._publish(lockAvailabilityTopic(id), online ? PAYLOAD_ONLINE : PAYLOAD_OFFLINE, {
+        retain: true,
+        qos: 1
+      });
+    } catch (error) {
+      console.error('MQTT publishLockAvailability error:', error.message);
+    }
   }
 
   /**
@@ -397,18 +456,18 @@ class HomeAssistant {
       const ops = manager.getPersistedOperationLog(address);
       const last = latestOperation(ops);
       if (!last) return;
-      // Déduplication : skip si le recordNumber n'a pas changé depuis la
-      // dernière publication (même session). Évite un faux changement d'état
-      // dans HA à chaque reconnexion MQTT lorsque aucune nouvelle opération
-      // n'a eu lieu.
+      // Déduplication : skip si le recordNumber n'a pas changé depuis la dernière
+      // publication. Le seuil est PERSISTÉ (deviceInfoData) et non plus gardé en
+      // mémoire, pour ne pas republier — et donc re-déclencher des automations HA —
+      // à chaque redémarrage de l'addon (les messages retained suffisent).
       const lastRecord = last.recordNumber ?? null;
-      if (this._lastPublishedOpRecord.get(address) === lastRecord) return;
+      if (store.getLastPublishedRecord(address, 'op') === lastRecord) return;
       const id = lockIdFromAddress(address);
       await this._publish(lastOperationTopic(id), buildLastOperationPayload(last), {
         retain: true,
         qos: 1
       });
-      this._lastPublishedOpRecord.set(address, lastRecord);
+      store.setLastPublishedRecord(address, 'op', lastRecord);
     } catch (error) {
       console.error('MQTT publishLastOperation error:', error.message);
     }
@@ -428,15 +487,15 @@ class HomeAssistant {
       const ops = manager.getPersistedOperationLog(address);
       const last = latestUnlock(ops);
       if (!last) return;
-      // Déduplication : même logique que publishLastOperation.
+      // Déduplication : même logique (persistée) que publishLastOperation.
       const lastRecord = last.recordNumber ?? null;
-      if (this._lastPublishedUnlockRecord.get(address) === lastRecord) return;
+      if (store.getLastPublishedRecord(address, 'unlock') === lastRecord) return;
       const id = lockIdFromAddress(address);
       await this._publish(lastUnlockTopic(id), buildLastOperationPayload(last), {
         retain: true,
         qos: 1
       });
-      this._lastPublishedUnlockRecord.set(address, lastRecord);
+      store.setLastPublishedRecord(address, 'unlock', lastRecord);
     } catch (error) {
       console.error('MQTT publishLastUnlock error:', error.message);
     }
@@ -535,31 +594,77 @@ class HomeAssistant {
    */
   async _onLockUnpaired(lock) {
     if (!this.connected) return;
-    const id = lockIdFromAddress(lock.getAddress());
-    const discoveryTopics = [
-      discoveryConfigTopic(this.discovery_prefix, 'lock', id, 'lock'),
-      discoveryConfigTopic(this.discovery_prefix, 'sensor', id, 'battery'),
-      discoveryConfigTopic(this.discovery_prefix, 'sensor', id, 'rssi'),
-      discoveryConfigTopic(this.discovery_prefix, 'sensor', id, 'last_operation'),
-      discoveryConfigTopic(this.discovery_prefix, 'sensor', id, 'last_access'),
-      discoveryConfigTopic(this.discovery_prefix, 'sensor', id, 'last_operation_time'),
-      discoveryConfigTopic(this.discovery_prefix, 'sensor', id, 'last_access_time'),
-      discoveryConfigTopic(this.discovery_prefix, 'sensor', id, 'last_user'),
-      discoveryConfigTopic(this.discovery_prefix, 'binary_sensor', id, 'connectivity')
-    ];
-    for (const topic of discoveryTopics) {
-      if (process.env.MQTT_DEBUG == '1') {
-        console.log('MQTT Remove discovery', topic);
+    try {
+      const id = lockIdFromAddress(lock.getAddress());
+      const discoveryTopics = [
+        discoveryConfigTopic(this.discovery_prefix, 'lock', id, 'lock'),
+        discoveryConfigTopic(this.discovery_prefix, 'sensor', id, 'battery'),
+        discoveryConfigTopic(this.discovery_prefix, 'sensor', id, 'rssi'),
+        discoveryConfigTopic(this.discovery_prefix, 'sensor', id, 'last_operation'),
+        discoveryConfigTopic(this.discovery_prefix, 'sensor', id, 'last_access'),
+        discoveryConfigTopic(this.discovery_prefix, 'sensor', id, 'last_operation_time'),
+        discoveryConfigTopic(this.discovery_prefix, 'sensor', id, 'last_access_time'),
+        discoveryConfigTopic(this.discovery_prefix, 'sensor', id, 'last_user'),
+        discoveryConfigTopic(this.discovery_prefix, 'event', id, 'operation'),
+        discoveryConfigTopic(this.discovery_prefix, 'binary_sensor', id, 'connectivity')
+      ];
+      for (const topic of discoveryTopics) {
+        if (process.env.MQTT_DEBUG == '1') {
+          console.log('MQTT Remove discovery', topic);
+        }
+        await this._publish(topic, '', { retain: true, qos: 1 });
       }
-      await this._publish(topic, '', { retain: true });
+      // Purge retained data topics so a re-pair starts clean. (operationEventTopic is
+      // published non-retained, so nothing lingers there — no need to purge it.)
+      for (const topic of [stateTopic(id), lockAvailabilityTopic(id), lastOperationTopic(id), lastUnlockTopic(id)]) {
+        await this._publish(topic, '', { retain: true, qos: 1 });
+      }
+      this.configuredLocks.delete(lock.getAddress());
+      store.clearPublishedRecords(lock.getAddress());
+    } catch (error) {
+      console.error('MQTT _onLockUnpaired error:', error.message);
     }
-    // Purge retained data topics so a re-pair starts clean.
-    for (const topic of [stateTopic(id), lockAvailabilityTopic(id), lastOperationTopic(id), lastUnlockTopic(id)]) {
-      await this._publish(topic, '', { retain: true });
+  }
+
+  /**
+   * A lock stopped responding to BLE advertisements/connects for longer than the
+   * configured timeout (manager's reachability watchdog) — flip its per-lock
+   * availability topic to 'offline' so hybrid-availability entities go unavailable
+   * instead of showing stale battery/rssi/state values forever.
+   * @param {import('ttlock-sdk-js').TTLock} lock
+   */
+  async _onLockOffline(lock) {
+    await this.publishLockAvailability(lock, false);
+  }
+
+  /**
+   * A previously-offline lock answered a BLE advertisement/connect again.
+   * @param {import('ttlock-sdk-js').TTLock} lock
+   */
+  async _onLockOnline(lock) {
+    await this.publishLockAvailability(lock, true);
+  }
+
+  /**
+   * A new operation was read from a lock's log (manager emits one `lockOperation`
+   * per new record, in chronological order). Publish it as a transient HA `event`
+   * so automations can react per operation and HA keeps a history — unlike the
+   * retained last_operation/last_access sensors which only expose the latest state.
+   * @param {import('ttlock-sdk-js').TTLock} lock
+   * @param {object} op enriched operation (recordTypeCategory / recordTypeName set)
+   */
+  async _onLockOperation(lock, op) {
+    if (!this.connected || !op) return;
+    try {
+      const id = lockIdFromAddress(lock.getAddress());
+      // NON-retained: an event is a point-in-time trigger, not a state to restore.
+      await this._publish(operationEventTopic(id), buildOperationEventPayload(op), {
+        retain: false,
+        qos: 1
+      });
+    } catch (error) {
+      console.error('MQTT _onLockOperation error:', error.message);
     }
-    this.configuredLocks.delete(lock.getAddress());
-    this._lastPublishedOpRecord.delete(lock.getAddress());
-    this._lastPublishedUnlockRecord.delete(lock.getAddress());
   }
 
   /**

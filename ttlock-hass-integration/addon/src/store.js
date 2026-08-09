@@ -220,12 +220,94 @@ class Store {
     return this.deviceInfoData[address]?.lastProcessedRecord || 0;
   }
 
+  /**
+   * Persist the recordNumber of the last operation published to MQTT for the
+   * given sensor kind ('op' = last_operation, 'unlock' = last_access). Persisting
+   * (rather than an in-memory Map) prevents re-publishing — and thus re-triggering
+   * HA automations — after an addon restart, since retained messages already hold
+   * the current value.
+   * @param {string} address Lock MAC address
+   * @param {'op'|'unlock'} kind
+   * @param {number|null} recordNumber
+   */
+  setLastPublishedRecord(address, kind, recordNumber) {
+    if (!address || (kind !== 'op' && kind !== 'unlock')) return;
+    if (!this.deviceInfoData[address]) this.deviceInfoData[address] = {};
+    if (!this.deviceInfoData[address].lastPublished) this.deviceInfoData[address].lastPublished = {};
+    if (this.deviceInfoData[address].lastPublished[kind] === recordNumber) return; // no-op
+    this.deviceInfoData[address].lastPublished[kind] = recordNumber;
+    this.saveData();
+  }
+
+  /**
+   * @param {string} address Lock MAC address
+   * @param {'op'|'unlock'} kind
+   * @returns {number|null|undefined} last published recordNumber for this kind
+   */
+  getLastPublishedRecord(address, kind) {
+    return this.deviceInfoData[address]?.lastPublished?.[kind];
+  }
+
+  /** Forget the published-record bookkeeping for a lock (called on unpair). */
+  clearPublishedRecords(address) {
+    if (this.deviceInfoData[address]?.lastPublished) {
+      delete this.deviceInfoData[address].lastPublished;
+      this.saveData();
+    }
+  }
+
+  /**
+   * Nombre maximum d'opérations conservées dans le journal persisté (les plus récentes).
+   * Le tableau en mémoire reste complet : cette borne ne s'applique qu'à l'écriture disque.
+   * Configurable via l'option addon `max_oplog` (env MAX_OPLOG) ; défaut 300.
+   */
+  static MAX_OPLOG = parseInt(process.env.MAX_OPLOG, 10) > 0 ? parseInt(process.env.MAX_OPLOG, 10) : 300;
+
+  /**
+   * Densifie un journal d'opérations pour l'écriture disque : retire les trous/`null`
+   * (le SDK stocke operationLog comme un tableau creux indexé par recordNumber, donc
+   * JSON.stringify sème des `null` pour chaque recordNumber non lu), trie du plus récent
+   * au plus ancien (operateDate desc, puis recordNumber desc) et borne aux MAX_OPLOG
+   * entrées les plus récentes. Fonction pure — aucun effet de bord.
+   * @param {Array} operationLog
+   * @returns {Array} tableau dense trié, borné à MAX_OPLOG
+   */
+  _denseOperationLog(operationLog) {
+    return operationLog
+      .filter(Boolean)
+      .sort((a, b) => {
+        if (b.operateDate !== a.operateDate) return (b.operateDate || 0) - (a.operateDate || 0);
+        return (b.recordNumber || 0) - (a.recordNumber || 0);
+      })
+      .slice(0, Store.MAX_OPLOG);
+  }
+
+  /**
+   * Reconstruit un tableau creux indexé par recordNumber à partir du journal dense lu
+   * du fichier. Le SDK dépend de cette indexation (`operationLog[recordNumber]`) pour son
+   * cache : sans elle, il re-scanne tout le journal au redémarrage. Les entrées sans
+   * recordNumber numérique sont ignorées. Une entrée sans operationLog valide est renvoyée
+   * telle quelle. Fonction pure — aucun effet de bord.
+   * @param {any} entry
+   * @returns {any}
+   */
+  _reindexOperationLog(entry) {
+    if (!entry || !Array.isArray(entry.operationLog)) return entry;
+    const sparse = [];
+    for (const op of entry.operationLog) {
+      if (op && typeof op.recordNumber === 'number') sparse[op.recordNumber] = op;
+    }
+    return { ...entry, operationLog: sparse };
+  }
+
   async loadData() {
     try {
       await fs.access(this.settingsPath + '/lockData.json');
       const lockDataTxt = (await fs.readFile(this.settingsPath + '/lockData.json')).toString();
       const parsed = JSON.parse(lockDataTxt);
-      this.lockData = Array.isArray(parsed) ? parsed : [];
+      // Ré-indexe operationLog par recordNumber : le fichier est dense (sans null) mais le
+      // SDK attend un tableau creux indexé par recordNumber (cf. _reindexOperationLog).
+      this.lockData = (Array.isArray(parsed) ? parsed : []).map((entry) => this._reindexOperationLog(entry));
     } catch (error) {
       this.lockData = [];
       if (error.code !== 'ENOENT') {
@@ -309,19 +391,14 @@ class Store {
       } catch (error) {
         if (error.code !== 'ENOENT') console.warn('lockData.json backup failed:', error.message);
       }
-      // Prune operationLog to the 300 most recent entries before writing — in-memory
-      // lockData stays intact so the SDK's sequence-number tracking is unaffected.
-      const MAX_OPLOG = 300;
+      // Densifie operationLog avant écriture : le tableau en mémoire est creux (indexé par
+      // recordNumber côté SDK), donc JSON.stringify sèmerait un `null` par recordNumber non
+      // lu. On densifie TOUJOURS (pas seulement au-delà de 300) pour que le fichier ne
+      // contienne aucun `null`, tout en bornant aux 300 opérations les plus récentes.
+      // In-memory lockData stays intact so the SDK's sequence-number tracking is unaffected.
       const lockDataToSave = this.lockData.map((entry) => {
-        if (!entry || !Array.isArray(entry.operationLog) || entry.operationLog.length <= MAX_OPLOG) return entry;
-        const pruned = entry.operationLog
-          .filter(Boolean)
-          .sort((a, b) => {
-            if (b.operateDate !== a.operateDate) return (b.operateDate || 0) - (a.operateDate || 0);
-            return (b.recordNumber || 0) - (a.recordNumber || 0);
-          })
-          .slice(0, MAX_OPLOG);
-        return { ...entry, operationLog: pruned };
+        if (!entry || !Array.isArray(entry.operationLog)) return entry;
+        return { ...entry, operationLog: this._denseOperationLog(entry.operationLog) };
       });
       await fs.writeFile(tmpLock, Buffer.from(JSON.stringify(lockDataToSave)));
       await this.fileDataRename(tmpLock, lockPath);

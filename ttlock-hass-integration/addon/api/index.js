@@ -271,6 +271,24 @@ async function handleConfig(api, msg) {
   }
 }
 
+/**
+ * Union two operation lists by recordNumber (fresh wins on conflict), sorted like
+ * the frontend/store: operateDate desc, then recordNumber desc. Guards against a
+ * partial BLE read shrinking the journal already shown from cache.
+ * @param {Array} cached
+ * @param {Array} fresh
+ * @returns {Array}
+ */
+function mergeOperationsByRecord(cached, fresh) {
+  const byRecord = new Map();
+  for (const op of cached || []) if (op) byRecord.set(op.recordNumber, op);
+  for (const op of fresh || []) if (op) byRecord.set(op.recordNumber, op); // fresh overrides
+  return [...byRecord.values()].sort((a, b) => {
+    if (b.operateDate !== a.operateDate) return (b.operateDate || 0) - (a.operateDate || 0);
+    return (b.recordNumber || 0) - (a.recordNumber || 0);
+  });
+}
+
 async function handleOperations(api, msg) {
   if (!msg.data?.address) return;
   const address = msg.data.address;
@@ -280,13 +298,21 @@ async function handleOperations(api, msg) {
   const reload = msg.data.reload;
 
   const cached = manager.getPersistedOperationLog(address);
-  if (cached.length) api.sendOperationLog(address, cached);
 
-  if (reload === false) return; // vue ouverte : cache seul, pas de BLE
+  if (reload === false) {
+    // Vue ouverte : cache seul, pas de BLE. On répond TOUJOURS (même cache vide)
+    // pour débloquer le spinner côté frontend (setOperations met waitingOperations=false).
+    api.sendOperationLog(address, cached);
+    return;
+  }
+
+  if (cached.length) api.sendOperationLog(address, cached);
 
   const fresh = await manager.getOperationLog(address, true);
   if (Array.isArray(fresh)) {
-    api.sendOperationLog(address, fresh);
+    // Fusion cache ∪ BLE par recordNumber : une lecture BLE partielle (cache SDK
+    // incomplet / lecture interrompue) ne doit pas RÉDUIRE le journal déjà affiché.
+    api.sendOperationLog(address, mergeOperationsByRecord(cached, fresh));
     return;
   }
   // BLE échoué

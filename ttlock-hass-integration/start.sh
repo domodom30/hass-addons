@@ -6,6 +6,12 @@ export MQTT_SSL=$(bashio::services mqtt "ssl")
 export MQTT_USER=$(bashio::services mqtt "username")
 export MQTT_PASS=$(bashio::services mqtt "password")
 export MQTT_DISCOVERY_PREFIX=$(bashio::config "discovery_prefix")
+export LOCK_OFFLINE_TIMEOUT=$(bashio::config "lock_offline_timeout")
+export MAX_OPLOG=$(bashio::config "max_oplog")
+# Aligne l'horloge du process sur le fuseau de Home Assistant : la serrure enregistre
+# l'heure locale, donc les timestamps du journal reçoivent ainsi l'offset (DST-correct)
+# attendu par les capteurs HA device_class: timestamp.
+export TZ=$(bashio::info.timezone)
 export GATEWAY=$(bashio::config "gateway")
 export GATEWAY_HOST=$(bashio::config "gateway_host")
 export GATEWAY_PORT=$(bashio::config "gateway_port")

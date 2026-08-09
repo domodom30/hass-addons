@@ -17,8 +17,15 @@ import {
   parseCommandTopic,
   latestOperation,
   latestUnlock,
-  buildLastOperationPayload
+  buildLastOperationPayload,
+  buildOperationEventPayload,
+  operationEventTopic,
+  OPERATION_EVENT_TYPES
 } from '../src/mqttTopics.js';
+
+// operateDateToIso emits a timezone-aware ISO using the process TZ (DST-aware).
+// Pin UTC so the expected offsets below are deterministic across machines/CI.
+process.env.TZ = 'UTC';
 
 test('constants', () => {
   assert.equal(DATA_PREFIX, 'ttlock');
@@ -139,8 +146,8 @@ test('buildLastOperationPayload', () => {
     by: 'Carte Alice',
     record_type: 4,
     record_number: 42,
-    timestamp: '2026-05-15T09:30:00', // ISO 8601 converti depuis le format compact YYYYMMDDHHmmss
-    battery: 0 // numeric 0 kept, not coerced to null
+    timestamp: '2026-05-15T09:30:00+00:00', // ISO 8601 timezone-aware (TZ=UTC ici)
+    battery_at_event: 0 // numeric 0 kept, not coerced to null
   });
 });
 
@@ -154,12 +161,40 @@ test('buildLastOperationPayload falls back to password then null', () => {
 
 test('buildLastOperationPayload timestamp: compact YYYYMMDDHHmmss → ISO 8601', () => {
   // Format entier brut du SDK TTLock (ex. serrure réelle)
-  assert.equal(buildLastOperationPayload({ operateDate: 20260520205751 }).timestamp, '2026-05-20T20:57:51');
+  assert.equal(buildLastOperationPayload({ operateDate: 20260520205751 }).timestamp, '2026-05-20T20:57:51+00:00');
   // Format string avec séparateurs (valeur de test / affichée)
-  assert.equal(buildLastOperationPayload({ operateDate: '2026-05-20 20:57:51' }).timestamp, '2026-05-20T20:57:51');
+  assert.equal(buildLastOperationPayload({ operateDate: '2026-05-20 20:57:51' }).timestamp, '2026-05-20T20:57:51+00:00');
   // Sans secondes (12 chiffres, padded)
-  assert.equal(buildLastOperationPayload({ operateDate: 202605201957 }).timestamp, '2026-05-20T19:57:00');
+  assert.equal(buildLastOperationPayload({ operateDate: 202605201957 }).timestamp, '2026-05-20T19:57:00+00:00');
   // Absent
   assert.equal(buildLastOperationPayload({ operateDate: null }).timestamp, null);
   assert.equal(buildLastOperationPayload({}).timestamp, null);
+});
+
+test('operateDateToIso is DST-aware (offset from the op date, not now)', () => {
+  const prev = process.env.TZ;
+  process.env.TZ = 'Europe/Paris';
+  try {
+    // Été (CEST, UTC+2) et hiver (CET, UTC+1) doivent produire des offsets différents,
+    // ce qui prouve que l'offset est calculé à la date de l'op (pas à l'instant courant).
+    assert.equal(buildLastOperationPayload({ operateDate: 20260715120000 }).timestamp, '2026-07-15T12:00:00+02:00');
+    assert.equal(buildLastOperationPayload({ operateDate: 20260115120000 }).timestamp, '2026-01-15T12:00:00+01:00');
+  } finally {
+    process.env.TZ = prev;
+  }
+});
+
+test('buildOperationEventPayload maps category to event_type', () => {
+  const op = { recordTypeCategory: 'UNLOCK', recordTypeName: 'Unlock by IC card', recordNumber: 7, operateDate: 20260520205751 };
+  const payload = buildOperationEventPayload(op);
+  assert.equal(payload.event_type, 'unlock');
+  assert.ok(OPERATION_EVENT_TYPES.includes(payload.event_type));
+  assert.equal(payload.event, 'Unlock by IC card'); // attributs de last_operation réutilisés
+  // Catégorie inconnue → repli sur 'other'
+  assert.equal(buildOperationEventPayload({ recordTypeCategory: 'WEIRD' }).event_type, 'other');
+  assert.equal(buildOperationEventPayload({}).event_type, 'other');
+});
+
+test('operationEventTopic', () => {
+  assert.equal(operationEventTopic('e1581b3a605e'), 'ttlock/e1581b3a605e/event');
 });

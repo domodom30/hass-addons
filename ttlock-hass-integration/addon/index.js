@@ -66,5 +66,12 @@ init({
   gateway_pass: process.env.GATEWAY_PASS,
   // Cooldown en secondes entre deux lectures du journal opérationnel (option addon oplog_cooldown).
   // Manager.js lit process.env.OPLOG_COOLDOWN directement ; cette entrée documente le paramètre.
-  oplog_cooldown: parseInt(process.env.OPLOG_COOLDOWN, 10) || 10
+  oplog_cooldown: parseInt(process.env.OPLOG_COOLDOWN, 10) || 10,
+  // Minutes sans contact BLE avant qu'un lock ne soit publié 'offline' sur son topic de
+  // disponibilité MQTT (option addon lock_offline_timeout). Manager.js lit
+  // process.env.LOCK_OFFLINE_TIMEOUT directement ; cette entrée documente le paramètre.
+  lock_offline_timeout: parseInt(process.env.LOCK_OFFLINE_TIMEOUT, 10) || 15,
+  // Taille maximale du journal d'opérations persisté (option addon max_oplog).
+  // store.js lit process.env.MAX_OPLOG directement ; cette entrée documente le paramètre.
+  max_oplog: parseInt(process.env.MAX_OPLOG, 10) || 300
 });

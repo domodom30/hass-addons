@@ -139,7 +139,8 @@ export default {
     autoLoad(locks) {
       for (const lock of locks) {
         if (!this.$store.state.operations[lock.address]) {
-          this.$store.dispatch("readOperations", lock.address)
+          // Dashboard : cache seul (reload=false), jamais de lecture BLE par serrure au démarrage.
+          this.$store.dispatch("readOperations", { address: lock.address, reload: false })
         }
       }
     },

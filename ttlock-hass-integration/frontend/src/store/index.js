@@ -294,10 +294,15 @@ const store = createStore({
       commit('setWaitingCalibrate', true);
       api.calibrateTime(lockAddress);
     },
-    async readOperations({ state, commit }, lockAddress) {
+    async readOperations({ state, commit }, payload) {
+      // Rétrocompat : un dispatch avec une simple adresse (string) vaut cache seul
+      // (reload=false). Le rejeu des requêtes pending après reconnexion WS passe une
+      // string, donc il ne redéclenche jamais de lecture BLE bloquante.
+      const address = typeof payload === 'string' ? payload : payload.address;
+      const reload = typeof payload === 'string' ? false : !!payload.reload;
       if (state.waiting || state.waitingOperations) return;
       commit('setWaitingOperations', true);
-      api.requestOperations(lockAddress);
+      api.requestOperations(address, reload);
     },
     async unpair({ state, commit }, lockAddress) {
       if (state.waiting) return;

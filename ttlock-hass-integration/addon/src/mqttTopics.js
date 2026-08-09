@@ -160,10 +160,17 @@ export function latestUnlock(operations) {
 
 /**
  * Convert a TTLock compact date (YYYYMMDDHHmmss as integer or formatted string)
- * to an ISO 8601 string ("YYYY-MM-DDTHH:mm:ss") suitable for HA timestamp
- * sensors. Strips all non-digit characters so it handles both the raw SDK
- * format (20260520205751) and the formatted display string ("2026-05-20 20:57:51").
- * Returns null when the value is absent or too short to be a valid date.
+ * to a timezone-aware ISO 8601 string ("YYYY-MM-DDTHH:mm:ss±HH:MM") suitable for
+ * HA `device_class: timestamp` sensors. Strips all non-digit characters so it
+ * handles both the raw SDK format (20260520205751) and the formatted display
+ * string ("2026-05-20 20:57:51").
+ *
+ * The lock stores LOCAL wall-clock time. We build a Date in the process's local
+ * timezone (TZ = Home Assistant's timezone, exported by start.sh) so
+ * getTimezoneOffset() yields the offset valid AT THAT DATE — i.e. DST-correct.
+ * This fixes the 1 h drift the previous approach had, which appended HA's
+ * *current* offset (now()) to a timestamp recorded on the other side of a DST
+ * switch. Returns null when the value is absent or too short to be a valid date.
  * @param {number|string|null|undefined} compact
  * @returns {string|null}
  */
@@ -172,7 +179,20 @@ function operateDateToIso(compact) {
   const digits = String(compact).replace(/\D/g, '');
   if (digits.length < 12) return null; // need at least YYYYMMDDHHmm
   const d = digits.padEnd(14, '0');
-  return `${d.slice(0, 4)}-${d.slice(4, 6)}-${d.slice(6, 8)}T${d.slice(8, 10)}:${d.slice(10, 12)}:${d.slice(12, 14)}`;
+  const y = +d.slice(0, 4);
+  const mo = +d.slice(4, 6);
+  const da = +d.slice(6, 8);
+  const h = +d.slice(8, 10);
+  const mi = +d.slice(10, 12);
+  const s = +d.slice(12, 14);
+  const dt = new Date(y, mo - 1, da, h, mi, s);
+  if (isNaN(dt.getTime())) return null;
+  const pad = (n) => String(n).padStart(2, '0');
+  const offMin = -dt.getTimezoneOffset(); // minutes east of UTC (DST-aware for this date)
+  const sign = offMin >= 0 ? '+' : '-';
+  const abs = Math.abs(offMin);
+  const offset = `${sign}${pad(Math.floor(abs / 60))}:${pad(abs % 60)}`;
+  return `${d.slice(0, 4)}-${pad(mo)}-${pad(da)}T${pad(h)}:${pad(mi)}:${pad(s)}${offset}`;
 }
 
 /**
@@ -192,6 +212,29 @@ export function buildLastOperationPayload(op) {
     record_type: op.recordType ?? null,
     record_number: op.recordNumber ?? null,
     timestamp: operateDateToIso(op.operateDate),
-    battery: op.electricQuantity ?? null
+    // Battery level *at the moment of the operation* — historical, not the current
+    // battery. Named distinctly so it is never confused with the live battery sensor
+    // (which reads the state topic).
+    battery_at_event: op.electricQuantity ?? null
   };
+}
+
+/**
+ * HA MQTT `event` platform expects `event_type` (must be one of the entity's
+ * declared event_types) plus arbitrary attributes. We lower-case the operation
+ * category (UNLOCK/LOCK/FAILED/ALARM/OTHER) and reuse the last-operation payload
+ * for the attributes. Published NON-retained (events are transient).
+ * @param {object} op enriched operation (recordTypeCategory set)
+ */
+export const OPERATION_EVENT_TYPES = ['unlock', 'lock', 'failed', 'alarm', 'other'];
+
+export function buildOperationEventPayload(op) {
+  const category = (op.recordTypeCategory || 'OTHER').toLowerCase();
+  const event_type = OPERATION_EVENT_TYPES.includes(category) ? category : 'other';
+  return { event_type, ...buildLastOperationPayload(op) };
+}
+
+/** Topic carrying transient operation events (HA `event` entity). */
+export function operationEventTopic(id) {
+  return DATA_PREFIX + '/' + id + '/event';
 }
