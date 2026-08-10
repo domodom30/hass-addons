@@ -6,7 +6,7 @@
 
 **Integrate your TTLock smart locks directly into Home Assistant — no cloud required.**
 
-[![Version](https://img.shields.io/badge/version-2.6.4-blue?style=flat-square)](https://github.com/domodom30/hass-addons/blob/master/ttlock-hass-integration/CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-2.6.5-blue?style=flat-square)](https://github.com/domodom30/hass-addons/blob/master/ttlock-hass-integration/CHANGELOG.md)
 [![HA](https://img.shields.io/badge/Home%20Assistant-compatible-41BDF5?style=flat-square&logo=homeassistant)](https://www.home-assistant.io/)
 [![BLE](https://img.shields.io/badge/Bluetooth-BLE-0082FC?style=flat-square&logo=bluetooth)](https://github.com/abandonware/noble)
 [![SDK](https://img.shields.io/badge/SDK-%40domodom30%2Fttlock--sdk--js-orange?style=flat-square)](https://www.npmjs.com/package/@domodom30/ttlock-sdk-js)
