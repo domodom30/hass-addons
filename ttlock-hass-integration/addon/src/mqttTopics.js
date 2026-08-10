@@ -89,6 +89,24 @@ export function discoveryConfigTopic(prefix, component, id, objectId) {
 }
 
 /**
+ * Entités de découverte retirées en 2.6.7, listées ici comme unique source de vérité
+ * pour leur purge. La découverte MQTT est retained : sans republication d'un payload
+ * vide sur leur topic de config, Home Assistant conserverait indéfiniment les entités
+ * orphelines des installations existantes.
+ *
+ * Ces trois capteurs n'étaient que des projections plates de champs déjà exposés en
+ * attributs de `last_operation` / `last_access` (mêmes topics), et leur juxtaposition
+ * mélangeait deux chronologies distinctes — toutes les opérations d'un côté, le dernier
+ * accès par identifiant de l'autre.
+ * @type {ReadonlyArray<[string, string]>}
+ */
+export const REMOVED_DISCOVERY_OBJECT_IDS = Object.freeze([
+  ['sensor', 'last_operation_time'],
+  ['sensor', 'last_access_time'],
+  ['sensor', 'last_user']
+]);
+
+/**
  * Parse an inbound command topic `ttlock/<12 hex>/set`.
  * @param {string} topic
  * @returns {{address: string}|null} null when the topic is not a valid command

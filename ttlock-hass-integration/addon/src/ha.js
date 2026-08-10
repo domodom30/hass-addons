@@ -16,6 +16,7 @@ import {
   lastUnlockTopic,
   operationEventTopic,
   discoveryConfigTopic,
+  REMOVED_DISCOVERY_OBJECT_IDS,
   parseCommandTopic,
   latestOperation,
   latestUnlock,
@@ -289,59 +290,6 @@ class HomeAssistant {
         }
       },
       {
-        component: 'sensor',
-        objectId: 'last_operation_time',
-        payload: {
-          unique_id: 'ttlock_' + id + '_last_operation_time',
-          name: name + ' Last operation time',
-          device: device,
-          device_class: 'timestamp',
-          icon: 'mdi:clock-check',
-          // Même topic que last_operation. Le backend émet désormais un ISO 8601
-          // déjà timezone-aware (offset DST-correct calculé à la date de l'op), donc
-          // on le passe tel quel. Le garde `[-6] in ['+','-']` rejette les anciens
-          // messages retained sans offset ('…:57:51') et le format entier compact.
-          state_topic: lastOperationTopic(id),
-          value_template: "{{ value_json.timestamp if value_json.timestamp is string and value_json.timestamp[-6] in ['+', '-'] else None }}",
-          qos: 1,
-          ...avail,
-          ...origin
-        }
-      },
-      {
-        component: 'sensor',
-        objectId: 'last_access_time',
-        payload: {
-          unique_id: 'ttlock_' + id + '_last_access_time',
-          name: name + ' Last access time',
-          device: device,
-          device_class: 'timestamp',
-          icon: 'mdi:clock-check-outline',
-          // Même logique que last_operation_time (ISO déjà timezone-aware).
-          state_topic: lastUnlockTopic(id),
-          value_template: "{{ value_json.timestamp if value_json.timestamp is string and value_json.timestamp[-6] in ['+', '-'] else None }}",
-          qos: 1,
-          ...avail,
-          ...origin
-        }
-      },
-      {
-        component: 'sensor',
-        objectId: 'last_user',
-        payload: {
-          unique_id: 'ttlock_' + id + '_last_user',
-          name: name + ' Last user',
-          device: device,
-          icon: 'mdi:account',
-          state_topic: lastUnlockTopic(id),
-          value_template: "{{ value_json.by if value_json.by else '—' }}",
-          json_attributes_topic: lastUnlockTopic(id),
-          qos: 1,
-          ...avail,
-          ...origin
-        }
-      },
-      {
         component: 'event',
         objectId: 'operation',
         payload: {
@@ -351,8 +299,12 @@ class HomeAssistant {
           icon: 'mdi:gesture-tap',
           state_topic: operationEventTopic(id),
           event_types: OPERATION_EVENT_TYPES,
-          value_template: '{{ value_json.event_type }}',
-          json_attributes_topic: operationEventTopic(id),
+          // NI value_template NI json_attributes_topic ici. La plateforme `event` de HA
+          // exige que le payload reste un objet JSON portant `event_type` ; un template
+          // qui le réduit à la chaîne nue ('lock') le fait rejeter — l'entité restait
+          // bloquée sur `unknown` et HA journalisait « No valid JSON event payload
+          // detected » à chaque opération. Le payload de buildOperationEventPayload est
+          // déjà au bon format, et HA promeut lui-même les autres clés en attributs.
           qos: 1,
           ...avail,
           ...origin
@@ -382,6 +334,12 @@ class HomeAssistant {
     try {
       for (const entity of entities) {
         await this._publish(discoveryConfigTopic(this.discovery_prefix, entity.component, id, entity.objectId), entity.payload, { retain: true, qos: 1 });
+      }
+      // Purge des entités retirées : la découverte MQTT est retained, donc sans payload
+      // vide sur leur topic de config HA garderait les orphelines à vie. Idempotent —
+      // chaque (re)configuration nettoie une installation héritée.
+      for (const [component, objectId] of REMOVED_DISCOVERY_OBJECT_IDS) {
+        await this._publish(discoveryConfigTopic(this.discovery_prefix, component, id, objectId), '', { retain: true, qos: 1 });
       }
       this.configuredLocks.set(address, name);
     } catch (error) {
@@ -602,11 +560,12 @@ class HomeAssistant {
         discoveryConfigTopic(this.discovery_prefix, 'sensor', id, 'rssi'),
         discoveryConfigTopic(this.discovery_prefix, 'sensor', id, 'last_operation'),
         discoveryConfigTopic(this.discovery_prefix, 'sensor', id, 'last_access'),
-        discoveryConfigTopic(this.discovery_prefix, 'sensor', id, 'last_operation_time'),
-        discoveryConfigTopic(this.discovery_prefix, 'sensor', id, 'last_access_time'),
-        discoveryConfigTopic(this.discovery_prefix, 'sensor', id, 'last_user'),
         discoveryConfigTopic(this.discovery_prefix, 'event', id, 'operation'),
-        discoveryConfigTopic(this.discovery_prefix, 'binary_sensor', id, 'connectivity')
+        discoveryConfigTopic(this.discovery_prefix, 'binary_sensor', id, 'connectivity'),
+        // Entités retirées en 2.6.7 : toujours purgées au dépairage pour nettoyer les
+        // installations antérieures (source de vérité unique dans mqttTopics.js).
+        ...REMOVED_DISCOVERY_OBJECT_IDS.map(([component, objectId]) =>
+          discoveryConfigTopic(this.discovery_prefix, component, id, objectId))
       ];
       for (const topic of discoveryTopics) {
         if (process.env.MQTT_DEBUG == '1') {

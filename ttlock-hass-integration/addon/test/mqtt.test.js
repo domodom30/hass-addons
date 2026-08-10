@@ -14,6 +14,7 @@ import {
   lastOperationTopic,
   lastUnlockTopic,
   discoveryConfigTopic,
+  REMOVED_DISCOVERY_OBJECT_IDS,
   parseCommandTopic,
   latestOperation,
   latestUnlock,
@@ -197,4 +198,45 @@ test('buildOperationEventPayload maps category to event_type', () => {
 
 test('operationEventTopic', () => {
   assert.equal(operationEventTopic('e1581b3a605e'), 'ttlock/e1581b3a605e/event');
+});
+
+test('REMOVED_DISCOVERY_OBJECT_IDS: purge des entités retirées en 2.6.7', () => {
+  // Source de vérité unique pour la purge (configureLock + _onLockUnpaired). La
+  // découverte MQTT étant retained, oublier une entrée laisserait une entité
+  // orpheline à vie dans Home Assistant.
+  assert.deepEqual(REMOVED_DISCOVERY_OBJECT_IDS.map(([, objectId]) => objectId), [
+    'last_operation_time',
+    'last_access_time',
+    'last_user'
+  ]);
+  const topics = REMOVED_DISCOVERY_OBJECT_IDS.map(([component, objectId]) =>
+    discoveryConfigTopic('homeassistant', component, 'e1581b3a605e', objectId));
+  assert.deepEqual(topics, [
+    'homeassistant/sensor/e1581b3a605e/last_operation_time/config',
+    'homeassistant/sensor/e1581b3a605e/last_access_time/config',
+    'homeassistant/sensor/e1581b3a605e/last_user/config'
+  ]);
+});
+
+test('le payload event est autoportant: event_type + attributs, sans value_template', () => {
+  // L'entité HA `event` consomme désormais ce payload tel quel : il doit rester un
+  // objet JSON portant event_type, sinon HA le rejette (« No valid JSON event payload
+  // detected ») et l'entité ne se déclenche jamais.
+  const payload = buildOperationEventPayload({
+    recordTypeCategory: 'UNLOCK',
+    recordTypeName: 'Déverrouillage carte IC',
+    passwordName: 'Eddy',
+    recordType: 17,
+    recordNumber: 374,
+    operateDate: 20260810150316,
+    electricQuantity: 93
+  });
+  assert.equal(typeof payload, 'object');
+  assert.equal(payload.event_type, 'unlock');
+  // Les clés restantes deviennent les attributs de l'entité event côté HA.
+  assert.deepEqual(Object.keys(payload).filter((k) => k !== 'event_type').sort(), [
+    'battery_at_event', 'by', 'category', 'event', 'record_number', 'record_type', 'timestamp'
+  ]);
+  assert.equal(payload.by, 'Eddy');
+  assert.equal(payload.record_number, 374);
 });

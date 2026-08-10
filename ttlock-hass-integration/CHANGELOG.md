@@ -1,6 +1,47 @@
 # Changelog
 
 
+## [2.6.7] — 2026-08-10
+
+### 🐛 Fixed
+
+- **The `event` entity never fired.** Its discovery config carried
+  `value_template: '{{ value_json.event_type }}'`, but Home Assistant's MQTT `event`
+  platform requires the processed payload to stay a JSON object holding `event_type`.
+  Reduced to the bare string `lock`, every message was rejected — the entity sat on
+  `unknown` with `event_type: null` (its attributes did update, since
+  `json_attributes_topic` is handled separately), no automation could trigger on it, the
+  logbook stayed empty, and Home Assistant logged
+  `No valid JSON event payload detected` for every single operation. The published
+  payload was already in the expected shape, so both `value_template` and the now
+  redundant `json_attributes_topic` are gone: HA reads `event_type` from the payload and
+  promotes the remaining keys to attributes itself.
+
+### 🗑️ Removed
+
+- **The `last_operation_time`, `last_access_time` and `last_user` sensors.** All three
+  were flat projections of fields already exposed as attributes of `last_operation` /
+  `last_access`, published from the very same topics — `last_user` even duplicated the
+  complete attribute set of `last_access`. Side by side on the device card they mixed two
+  distinct timelines (every operation on one side, the last *credential* access on the
+  other) with nothing to signal it, so the card read as "Eddy locked the door at 18:01"
+  when the 18:01 record was a door-sensor lock with no credential at all.
+
+  The data is unchanged and still available:
+
+  ```jinja
+  {{ state_attr('sensor.<lock>_last_operation', 'timestamp') }}
+  {{ state_attr('sensor.<lock>_last_access', 'timestamp') }}
+  {{ state_attr('sensor.<lock>_last_access', 'by') }}
+  ```
+
+  MQTT discovery is retained, so the add-on republishes an empty payload on the three
+  config topics at every (re)configuration: existing installations drop the orphaned
+  entities on their own, with no manual cleanup. Update any dashboard card or automation
+  referencing them before upgrading. This supersedes the `last_user` sensor introduced in
+  2.5.0.
+
+
 ## [2.6.6] — 2026-08-10
 
 ### 🐛 Fixed
