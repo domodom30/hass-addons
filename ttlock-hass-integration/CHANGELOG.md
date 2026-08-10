@@ -1,6 +1,14 @@
 # Changelog
 
 
+## [2.6.8] — 2026-08-10
+
+### 📝 Changed
+
+- **Changelog only.** The 2.6.7 entry credited the `last_user` sensor to 2.5.0; it was
+  actually added in 2.5.3. Behaviour is identical to 2.6.7 — no add-on code changed.
+
+
 ## [2.6.7] — 2026-08-10
 
 ### 🐛 Fixed
@@ -39,7 +47,7 @@
   config topics at every (re)configuration: existing installations drop the orphaned
   entities on their own, with no manual cleanup. Update any dashboard card or automation
   referencing them before upgrading. This supersedes the `last_user` sensor introduced in
-  2.5.0.
+  2.5.3.
 
 
 ## [2.6.6] — 2026-08-10
