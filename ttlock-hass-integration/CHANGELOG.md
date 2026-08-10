@@ -1,6 +1,46 @@
 # Changelog
 
 
+## [2.6.6] — 2026-08-10
+
+### 🐛 Fixed
+
+- **New operations stopped being recorded once the lock's journal had gone full circle.**
+  The firmware journal is circular: past its ceiling (≈ 4998 records on an R6) the record
+  counter starts over on low indices. Both the deduplication threshold
+  (`recordNumber > lastProcessedRecord`) and the append probe (starting at
+  `max(recordNumber) + 1`) assumed that counter to be forever increasing. After the wrap
+  the probe kept polling sequences past the end of the ring, every genuinely new record
+  came back with an index *below* the stored threshold and was discarded as "already
+  processed" — the operation log froze, `last_operation` / `last_access` / the `event`
+  entity stopped updating, while the lock kept advertising `newEvents` and the add-on
+  reconnected over BLE every minute for nothing.
+
+  Novelty is now decided on `operateDate` — the only monotonic field in the journal —
+  with `recordNumber` kept purely as a tie-breaker within the same second, and persisted
+  alongside it (`lastProcessedDate`). The probe anchors on the **write head** (the most
+  recent record by date) instead of the highest index, follows the firmware's own
+  backwards sequence pointer once when it signals the end of the ring, and treats any
+  stale record it meets as an empty slot. A lock whose threshold is stuck past the ring
+  end realigns itself on the first read after the update.
+
+- **Thousands of stale operations are no longer replayed as Home Assistant events.**
+  Records recovered from the untouched part of the ring carry old dates; they now fail
+  the novelty test instead of being emitted one by one on `ttlock/<id>/event`. The
+  catch-up batch that follows a resynchronisation updates the sensors but stays silent on
+  the event topic, so automations bound to `event.*_operation` are not triggered
+  retroactively.
+
+- **The lock no longer wakes up every minute for an empty read.** A lock that keeps
+  advertising `newEvents` after its journal has been read now falls under the same
+  exponential back-off as connection failures (15 s → 3 min) after five consecutive reads
+  without a new operation. The first real operation resets it immediately.
+
+- Lock/unlock state and the event order are derived from the chronological order of the
+  new operations rather than from their record numbers, which no longer reflect time once
+  the journal has wrapped.
+
+
 ## [2.6.5] — 2026-08-10
 
 ### 🐛 Fixed

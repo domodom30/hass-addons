@@ -1,7 +1,7 @@
 import EventEmitter from 'node:events';
 import https from 'node:https';
 import store from './store.js';
-import { readOperationLogIncremental } from './oplog.js';
+import { readOperationLogIncremental, selectNewOperations } from './oplog.js';
 import { shouldForceMonitorRecovery, MONITOR_SILENCE_MS } from './monitorHealth.js';
 import { TTLockClient, AudioManage, LockedStatus, LogOperateCategory, LogOperateNames } from '@domodom30/ttlock-sdk-js';
 
@@ -1466,10 +1466,11 @@ class Manager extends EventEmitter {
       const res = await lock.resetLock();
       if (res) {
         // Reset serrure : le compteur d'enregistrements firmware repartira de 0 au
-        // ré-appairage. Remettre le seuil de déduplication à 0 pour ne pas ignorer les
-        // futures opérations (recordNumber <= ancien seuil). Voir aussi la détection de
-        // régression dans _processOperationLog (reset hors addon / remplacement serrure).
+        // ré-appairage. Remettre les deux seuils de déduplication à 0 pour ne pas ignorer
+        // les futures opérations (recordNumber <= ancien seuil, operateDate <= ancienne
+        // date). Voir aussi le réalignement de tête dans _processOperationLog.
         store.setLastProcessedRecord(address, 0);
+        store.setLastProcessedDate(address, 0);
         lock.removeAllListeners();
         this.pairedLocks.delete(address);
         this._lastSeen.delete(address);
@@ -2283,6 +2284,24 @@ class Manager extends EventEmitter {
         // normal fast (~25 s) oplog cadence (self-healing).
         lock._newEventsFailCount = 0;
         lock._newEventsCooldownUntil = 0;
+        // La serrure rediffuse newEvents=true dans TOUS ses advertisements, y compris
+        // quand la lecture n'a rien ramené : sans ce compteur on se reconnecte toutes les
+        // 60 s à vie (batterie). Après EMPTY_MAX lectures vides d'affilée, on réutilise le
+        // back-off exponentiel (cap 3 min). Le premier lot non vide remet tout à zéro, donc
+        // la réactivité normale revient dès qu'une vraie opération apparaît.
+        const EMPTY_MAX = 5;
+        if (lock._lastOplogNewCount > 0) {
+          lock._newEventsEmptyCount = 0;
+        } else {
+          lock._newEventsEmptyCount = (lock._newEventsEmptyCount || 0) + 1;
+          if (lock._newEventsEmptyCount >= EMPTY_MAX) {
+            this._openNewEventsCooldown(
+              lock,
+              lock._newEventsEmptyCount - EMPTY_MAX + 1,
+              `${lock._newEventsEmptyCount} lectures sans nouvelle opération`
+            );
+          }
+        }
       } else {
         // _processOperationLog a échoué (macro_adminLogin ou erreur de lecture) —
         // activer le backoff exponentiel pour ne pas respammer la serrure.
@@ -2325,13 +2344,26 @@ class Manager extends EventEmitter {
    * @param {import('ttlock-sdk-js').TTLock} lock
    */
   _scheduleNewEventsBackoff(lock) {
+    lock._newEventsFailCount = (lock._newEventsFailCount || 0) + 1;
+    this._openNewEventsCooldown(lock, lock._newEventsFailCount, `échec #${lock._newEventsFailCount}`);
+  }
+
+  /**
+   * Ouvre la fenêtre de cooldown newEvents, avec back-off exponentiel indexé sur `attempt`.
+   * Partagé par le circuit-breaker d'échec (_scheduleNewEventsBackoff) et par la protection
+   * contre les lectures vides répétées (_handleNewEventsUpdate) : dans les deux cas il faut
+   * espacer les reconnexions sans jamais mettre lock.newEvents à false immédiatement.
+   * @param {import('ttlock-sdk-js').TTLock} lock
+   * @param {number} attempt rang de la tentative (1 = premier back-off)
+   * @param {string} reason libellé affiché dans le log
+   */
+  _openNewEventsCooldown(lock, attempt, reason) {
     const BASE_MS = 15 * 1000; // premier backoff : 15 s (compromis réactivité / protection batterie)
     const MAX_MS = 3 * 60 * 1000; // cap: au plus une tentative toutes les 3 min
-    lock._newEventsFailCount = (lock._newEventsFailCount || 0) + 1;
-    const backoff = Math.min(BASE_MS * 2 ** (lock._newEventsFailCount - 1), MAX_MS);
+    const backoff = Math.min(BASE_MS * 2 ** (Math.max(attempt, 1) - 1), MAX_MS);
     lock._newEventsCooldownUntil = Date.now() + backoff;
     console.warn(
-      `newEvents: échec #${lock._newEventsFailCount} pour ${lock.getAddress()} — ` +
+      `newEvents: ${reason} pour ${lock.getAddress()} — ` +
       `prochaine tentative dans ${Math.round(backoff / 1000)} s`
     );
     if (lock._newEventsResetTimer) {
@@ -2437,75 +2469,91 @@ class Manager extends EventEmitter {
       // acquittées par le cloud — ce qui n'est pas possible en offline. Sans ce
       // filtre, on émettrait lockUnlock/lockLock à chaque cycle (~60 s) pour des
       // événements historiques, déclenchant des automations HA en boucle.
-      // _lastProcessedRecordNumber est chargé depuis deviceInfoData.json au premier
-      // appel pour survivre aux redémarrages de l'addon.
+      //
+      // Le critère PRINCIPAL est `operateDate`, pas `recordNumber` : le journal firmware
+      // est circulaire (plafond ≈ 4998 sur R6) et repart ensuite sur des index bas. Un
+      // seuil purement numérique rejetait alors toutes les nouvelles opérations à vie.
+      // `recordNumber` ne sert plus que de départage à date égale (même seconde).
+      // Les deux seuils sont chargés depuis deviceInfoData.json au premier appel pour
+      // survivre aux redémarrages de l'addon.
       if (lock._lastProcessedRecordNumber === undefined) {
         lock._lastProcessedRecordNumber = store.getLastProcessedRecord(lock.getAddress());
       }
-      let threshold = lock._lastProcessedRecordNumber;
-      // Parcours explicite plutôt que Math.max(...spread) : le journal peut compter des
-      // milliers d'entrées, au-delà de la limite d'arguments du spread.
-      let maxObserved = 0;
-      let sawRecord = false;
-      for (const op of operations) {
-        if (op && typeof op.recordNumber === 'number') {
-          sawRecord = true;
-          if (op.recordNumber > maxObserved) maxObserved = op.recordNumber;
-        }
+      if (lock._lastProcessedDate === undefined) {
+        lock._lastProcessedDate = store.getLastProcessedDate(lock.getAddress());
+      }
+      // Tête d'écriture connue AVANT la sonde : référence pour l'amorçage et le
+      // réalignement. Tout ce que la sonde a découvert au-delà est, par construction, neuf.
+      const head = readResult.head;
+      // Un rattrapage (amorçage après mise à jour, ou réalignement de tête) est publié
+      // sur les capteurs mais N'ÉMET PAS d'événements : rejouer des heures d'opérations
+      // déclencherait rétroactivement les automations HA branchées sur `event.*_operation`.
+      const { newOps, lastRecord, lastDate, resynced } = selectNewOperations(operations, head, {
+        lastRecord: lock._lastProcessedRecordNumber,
+        lastDate: lock._lastProcessedDate
+      });
+      if (resynced && head && head.recordNumber < lock._lastProcessedRecordNumber) {
+        console.warn(`_processOperationLog [${lock.getAddress()}]: tête d'écriture #${head.recordNumber} < seuil ${lock._lastProcessedRecordNumber} — journal circulaire (ou reset serrure), réalignement du seuil`);
       }
       // Succès = handshake admin confirmé PENDANT la lecture, ou à défaut des
       // enregistrements réellement nouveaux. Sans handshake, getOperationLog renvoie
       // silencieusement le cache SDK (cf. TTLock.js : `if (!adminOk) return this.operationLog`),
       // indiscernable d'une lecture réussie — d'où ce garde-fou, qui évite de remettre à
       // zéro le circuit-breaker newEvents sur une lecture fantôme.
-      if (!readResult.adminOk && !(sawRecord && maxObserved > threshold)) {
+      if (!readResult.adminOk && newOps.length === 0) {
         console.warn(`_processOperationLog [${lock.getAddress()}]: adminAuth absent — authentification admin BLE échouée ou déconnexion pendant la lecture`);
         lock._lastOperationLogFetch = Date.now();
         return false;
       }
       lock.newEvents = false;
       lock._lastOperationLogFetch = Date.now();
-      // Détection d'un reset serrure (via l'addon, l'app TTLock officielle ou un
-      // remplacement du matériel) : le compteur d'enregistrements firmware repart de 0,
-      // donc le recordNumber le plus élevé observé devient INFÉRIEUR au seuil mémorisé.
-      // Sans resynchronisation, toutes les nouvelles ops (recordNumber <= seuil) seraient
-      // filtrées à jamais et les capteurs HA last_operation/last_access resteraient figés.
-      // On remet le seuil à 0 pour retraiter la lecture courante comme entièrement nouvelle.
-      if (sawRecord && maxObserved < threshold) {
-        console.warn(`_processOperationLog [${lock.getAddress()}]: recordNumber max ${maxObserved} < seuil ${threshold} — reset serrure détecté, resynchronisation du seuil à 0`);
-        threshold = 0;
-        lock._lastProcessedRecordNumber = 0;
-        store.setLastProcessedRecord(lock.getAddress(), 0);
-      }
-      const newOps = operations.filter(op => op.recordNumber > threshold);
+      // Utilisé par _handleNewEventsUpdate pour espacer les reconnexions quand la serrure
+      // rediffuse newEvents=true sans qu'aucune opération n'apparaisse.
+      lock._lastOplogNewCount = newOps.length;
       // Résumé borné aux NOUVELLES opérations : `operations` est le journal complet en
       // cache, on ne veut pas déballer tout ça à chaque cycle.
-      const totalOps = operations.filter(Boolean).length;
+      const totalOps = operations.length;
+      // Les seuils sont persistés même sans nouveauté : un réalignement seul doit survivre,
+      // sinon il serait rejoué à chaque cycle. Les setters du store sont no-op à valeur
+      // inchangée, donc aucune écriture disque superflue.
+      lock._lastProcessedRecordNumber = lastRecord;
+      lock._lastProcessedDate = lastDate;
+      store.setLastProcessedRecord(lock.getAddress(), lastRecord);
+      store.setLastProcessedDate(lock.getAddress(), lastDate);
+      const headLabel = head ? `#${head.recordNumber}@${head.operateDate}` : 'aucune';
       if (newOps.length > 0) {
-        const maxRecord = newOps.reduce((m, op) => (op.recordNumber > m ? op.recordNumber : m), 0);
-        lock._lastProcessedRecordNumber = maxRecord;
-        store.setLastProcessedRecord(lock.getAddress(), maxRecord);
         const newSummary = newOps
           .slice(0, 10)
           .map(op => `#${op.recordNumber} type=${op.recordType}`)
           .join(', ') + (newOps.length > 10 ? ', …' : '');
         console.log('_processOperationLog: succès pour', lock.getAddress(),
-          `(journal ${totalOps} op(s), ${newOps.length} nouvelle(s): ${newSummary})`);
+          `(journal ${totalOps} op(s), tête ${headLabel}, ${newOps.length} nouvelle(s): ${newSummary})`);
       } else {
         console.log('_processOperationLog: succès pour', lock.getAddress(),
-          `(journal ${totalOps} op(s), aucune nouvelle)`);
+          `(journal ${totalOps} op(s), tête ${headLabel}, aucune nouvelle)`);
       }
-      // Émettre un évènement par NOUVELLE opération (ordre chronologique = recordNumber
-      // croissant) pour l'entité HA `event` — historique/automation par opération.
-      // On enrichit un CLONE (recordTypeName/category/passwordName) sans muter le cache
-      // SDK, qui serait sinon persisté enrichi puis re-enrichi (cf. getPersistedOperationLog).
-      const chronological = [...newOps].sort((a, b) => a.recordNumber - b.recordNumber);
-      for (const op of chronological) {
-        this.emit('lockOperation', lock, this._enrichOperation(structuredClone(op)));
+      // Émettre un évènement par NOUVELLE opération (ordre chronologique) pour l'entité
+      // HA `event` — historique/automation par opération. On enrichit un CLONE
+      // (recordTypeName/category/passwordName) sans muter le cache SDK, qui serait sinon
+      // persisté enrichi puis re-enrichi (cf. getPersistedOperationLog).
+      // Tri par date : après un tour du journal circulaire, l'ordre des recordNumber ne
+      // reflète plus l'ordre chronologique.
+      const chronological = [...newOps].sort(
+        (a, b) => (a.operateDate || 0) - (b.operateDate || 0) || a.recordNumber - b.recordNumber
+      );
+      if (resynced && newOps.length > 0) {
+        console.log('_processOperationLog: resynchronisation pour', lock.getAddress(),
+          `— ${newOps.length} opération(s) rattrapée(s), événements non émis`);
+      } else {
+        for (const op of chronological) {
+          this.emit('lockOperation', lock, this._enrichOperation(structuredClone(op)));
+        }
       }
       // Émettre une seule fois pour l'état final des NOUVELLES opérations uniquement.
+      // Parcours chronologique : sur un journal circulaire l'ordre des recordNumber ne
+      // donne plus l'ordre des évènements, et c'est bien le DERNIER qui fixe l'état.
       let lastStatus = LockedStatus.UNKNOWN;
-      for (let op of newOps) {
+      for (let op of chronological) {
         if (LogOperateCategory.UNLOCK.includes(op.recordType)) {
           lastStatus = LockedStatus.UNLOCKED;
         } else if (LogOperateCategory.LOCK.includes(op.recordType)) {

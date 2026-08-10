@@ -221,6 +221,30 @@ class Store {
   }
 
   /**
+   * Persist the operateDate (compact YYYYMMDDHHmmss) of the last operation already
+   * processed for a lock. C'est le critère de nouveauté PRINCIPAL : le journal firmware
+   * est circulaire, donc `recordNumber` finit par repartir sur des index bas et ne peut
+   * pas servir seul de seuil (cf. _processOperationLog). La date, elle, reste monotone.
+   * @param {string} address Lock MAC address
+   * @param {number} operateDate
+   */
+  setLastProcessedDate(address, operateDate) {
+    if (!address || typeof operateDate !== 'number') return;
+    if (!this.deviceInfoData[address]) this.deviceInfoData[address] = {};
+    if (this.deviceInfoData[address].lastProcessedDate === operateDate) return; // no-op
+    this.deviceInfoData[address].lastProcessedDate = operateDate;
+    this.saveData();
+  }
+
+  /**
+   * @param {string} address Lock MAC address
+   * @returns {number} last processed operateDate, or 0 if unknown
+   */
+  getLastProcessedDate(address) {
+    return this.deviceInfoData[address]?.lastProcessedDate || 0;
+  }
+
+  /**
    * Persist the recordNumber of the last operation published to MQTT for the
    * given sensor kind ('op' = last_operation, 'unlock' = last_access). Persisting
    * (rather than an in-memory Map) prevents re-publishing — and thus re-triggering
@@ -260,6 +284,12 @@ class Store {
    * Nombre maximum d'opérations conservées dans le journal persisté (les plus récentes).
    * Le tableau en mémoire reste complet : cette borne ne s'applique qu'à l'écriture disque.
    * Configurable via l'option addon `max_oplog` (env MAX_OPLOG) ; défaut 300.
+   *
+   * Conséquence à garder en tête : le cache mémoire peut contenir des milliers d'entrées
+   * dont l'index maximum reste bloqué sur la fin de l'anneau firmware, alors que le
+   * journal relu du disque redémarre sur les seuls MAX_OPLOG plus récents. Aucune logique
+   * de nouveauté ne doit donc dépendre de `Math.max(recordNumber)` : c'est exactement ce
+   * qui rendait l'addon aveugle après un tour complet du journal circulaire (cf. oplog.js).
    */
   static MAX_OPLOG = parseInt(process.env.MAX_OPLOG, 10) > 0 ? parseInt(process.env.MAX_OPLOG, 10) : 300;
 

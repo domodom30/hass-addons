@@ -82,6 +82,41 @@ test('_reindexOperationLog: entrée sans operationLog renvoyée telle quelle', (
   assert.equal(store._reindexOperationLog(notArray), notArray);
 });
 
+test('seuils de déduplication: recordNumber et operateDate persistés séparément', async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'ttlock-store-'));
+  const address = 'E4:5B:E2:5F:9C:B8';
+  try {
+    store.setDataPath(dir);
+    await store.loadData();
+
+    assert.equal(store.getLastProcessedRecord(address), 0, 'valeur par défaut');
+    assert.equal(store.getLastProcessedDate(address), 0, 'valeur par défaut');
+
+    store.setLastProcessedRecord(address, 4997);
+    store.setLastProcessedDate(address, 20260810090716);
+    assert.equal(store.getLastProcessedRecord(address), 4997);
+    assert.equal(store.getLastProcessedDate(address), 20260810090716);
+
+    // Après un tour du journal circulaire le recordNumber redescend, la date monte :
+    // les deux doivent pouvoir évoluer indépendamment.
+    store.setLastProcessedRecord(address, 371);
+    store.setLastProcessedDate(address, 20260810150408);
+    assert.equal(store.getLastProcessedRecord(address), 371);
+    assert.equal(store.getLastProcessedDate(address), 20260810150408);
+
+    // Les valeurs non numériques sont ignorées (pas d'écriture parasite).
+    store.setLastProcessedDate(address, 'nope');
+    assert.equal(store.getLastProcessedDate(address), 20260810150408);
+
+    await store.saveData();
+    const saved = JSON.parse(await fs.readFile(path.join(dir, 'deviceInfoData.json'), 'utf8'));
+    assert.equal(saved[address].lastProcessedRecord, 371);
+    assert.equal(saved[address].lastProcessedDate, 20260810150408);
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true });
+  }
+});
+
 test('intégration disque: round-trip creux-avec-null → dense (save) → creux (load) sans null', async () => {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'ttlock-store-'));
   try {
