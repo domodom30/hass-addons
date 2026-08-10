@@ -43,4 +43,9 @@ debug_mqtt: true // log MQTT messages sent and received
 gateway_debug: true // log websocket messages to and from the gateway
 lock_offline_timeout: 15 // minutes without BLE contact before a lock's MQTT entities are marked unavailable (default 15)
 max_oplog: 300 // maximum number of operation-log entries kept in the persisted journal (default 300)
+oplog_cooldown: 60 // seconds between two automatic operation-log reads (default 60)
 ```
+
+Lowering `oplog_cooldown` makes new operations reach Home Assistant faster, at the cost
+of one extra BLE connection per lock per cycle — which the lock's battery pays for. 20
+seconds is low enough to catch an auto-lock a few seconds after an unlock.

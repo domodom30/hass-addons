@@ -1,6 +1,8 @@
 import EventEmitter from 'node:events';
 import https from 'node:https';
 import store from './store.js';
+import { readOperationLogIncremental } from './oplog.js';
+import { shouldForceMonitorRecovery, MONITOR_SILENCE_MS } from './monitorHealth.js';
 import { TTLockClient, AudioManage, LockedStatus, LogOperateCategory, LogOperateNames } from '@domodom30/ttlock-sdk-js';
 
 const ScanType = Object.freeze({
@@ -117,6 +119,15 @@ class Manager extends EventEmitter {
     this._offlineLocks = new Set();
     /** @type {NodeJS.Timeout|undefined} periodic lock-reachability watchdog */
     this._lockOfflineWatchdog = undefined;
+    /**
+     * @type {Map<string, number>} address → epoch ms du dernier événement `disconnected`
+     * traité. Une déconnexion en mode gateway remonte la chaîne
+     * NobleWebsocketBinding → NobleDevice → TTBluetoothDevice → TTLock, dont aucun maillon
+     * n'a de garde d'idempotence : le même événement arrive jusqu'à deux fois.
+     */
+    this._lastDisconnectAt = new Map();
+    /** @type {number} epoch ms de la dernière reprise forcée du monitor (cf. _monitorLooksStale) */
+    this._lastMonitorRecoveryAt = 0;
   }
 
   async init() {
@@ -373,7 +384,7 @@ class Manager extends EventEmitter {
     // when the BLE path is idle, independently of the reconnect fast path.
     if (!this._gatewayWatchdogInterval) {
       this._gatewayWatchdogInterval = setInterval(() => {
-        this._ensureMonitoring();
+        this._ensureMonitoring(this._monitorLooksStale());
       }, 20000);
       if (typeof this._gatewayWatchdogInterval.unref === 'function') {
         this._gatewayWatchdogInterval.unref();
@@ -409,6 +420,58 @@ class Manager extends EventEmitter {
   }
 
   /**
+   * Le monitor se déclare-t-il actif alors qu'aucune publicité BLE n'arrive plus ?
+   *
+   * `isMonitoring()` ne dit pas si la radio écoute, seulement ce que le scanner croit de
+   * lui-même — et cette croyance survit à un transport mort. Les publicités reçues, elles,
+   * ne mentent pas : une serrure TTLock émet toutes les quelques secondes. Un silence
+   * prolongé alors qu'on se croit en écoute justifie de forcer un cycle stop/start, seul
+   * moyen de sortir d'un état où toutes les gardes d'idempotence sont trompées.
+   *
+   * Se déclenche bien avant le watchdog de disponibilité (15 min) pour que la réparation
+   * précède le passage des serrures en `offline`.
+   * @returns {boolean}
+   */
+  _monitorLooksStale() {
+    const stale = shouldForceMonitorRecovery({
+      monitoring: this.client?.isMonitoring?.() === true,
+      lastSeen: this._lastSeen.values(),
+      now: Date.now(),
+      lastRecoveryAt: this._lastMonitorRecoveryAt
+    });
+    if (stale) {
+      this._lastMonitorRecoveryAt = Date.now();
+      console.warn(
+        `[Gateway] Monitor déclaré actif mais aucune publicité BLE depuis plus de ` +
+        `${Math.round(MONITOR_SILENCE_MS / 1000)}s — reprise forcée du scan.`
+      );
+    }
+    return stale;
+  }
+
+  /**
+   * Débloque l'état interne du scanner noble avant une reprise forcée.
+   *
+   * `NobleScanner.startScan()` n'accepte de démarrer que depuis `scannerState`
+   * "unknown"/"stopped". Si un transport meurt sans émettre `poweredOff`, cet état reste
+   * figé sur "scanning" et tout `startMonitor()` ultérieur échoue silencieusement — y
+   * compris après que le manager a remis `client.monitoring`/`scanning` à zéro. Le
+   * remettre à "stopped" est le seul moyen de sortir de là sans redémarrer l'addon.
+   *
+   * Couplage interne assumé, dans la même veine que l'escape hatch sur
+   * `client.monitoring` : entièrement feature-detected, dégrade en no-op si la forme du
+   * SDK change. À réserver au chemin forcé — en fonctionnement normal c'est le SDK qui
+   * doit gérer son état.
+   */
+  _resetScannerState() {
+    const scanner = this.client?.bleService?.scanner;
+    if (!scanner || typeof scanner.scannerState !== 'string') return;
+    if (scanner.scannerState === 'scanning' || scanner.scannerState === 'starting') {
+      scanner.scannerState = 'stopped';
+    }
+  }
+
+  /**
    * Ensure the BLE monitor is actually running when the gateway is up and the
    * BLE path is idle.
    *
@@ -420,8 +483,14 @@ class Manager extends EventEmitter {
    * Reaching `client.monitoring/scanning` is internal coupling, but it is
    * feature-detected (typeof guard) and degrades to a no-op if the SDK shape
    * changes — never a crash.
+   *
+   * @param {boolean} [force] ignore le court-circuit `isMonitoring()`. À n'utiliser que
+   * lorsqu'un signal indépendant du SDK contredit cet état (cf. _monitorLooksStale) :
+   * sans cela, un scanner qui se déclare actif à tort ne serait jamais réparé, puisque
+   * c'est précisément cette valeur qui ment. Les gardes « radio occupée » restent
+   * actives dans tous les cas — on ne coupe jamais une opération BLE en cours.
    */
-  async _ensureMonitoring() {
+  async _ensureMonitoring(force = false) {
     if (this.gateway !== 'noble' || this.gatewayStatus !== 'connected') return;
     if (this._ensuringMonitor) return;
     // BLE path busy — the active flow (scan / lock op / queued connect / newEvents background read)
@@ -431,12 +500,12 @@ class Manager extends EventEmitter {
     // BLE connection is open, which on many adapters interrupts the connection and causes
     // onDisconnected → adminAuth=false → _processOperationLog returns false → échec #1 loop.
     if (this.scanning || this.waitingForConnect.size > 0 || this.connectQueue.size > 0 || this._bleMutex.size > 0) return;
-    if (this.client?.isMonitoring?.()) return;
+    if (!force && this.client?.isMonitoring?.()) return;
 
     this._ensuringMonitor = true;
     try {
       for (let attempt = 1; attempt <= 3; attempt++) {
-        if (this.client.isMonitoring()) return;
+        if (!force && this.client.isMonitoring()) return;
         try {
           await this.client.stopMonitor();
         } catch (error) {
@@ -453,6 +522,7 @@ class Manager extends EventEmitter {
           this.client.monitoring = false;
           if (typeof this.client.scanning === 'boolean') this.client.scanning = false;
         }
+        if (force) this._resetScannerState();
         await this.client.startMonitor();
         let poll = 30;
         while (!this.client.isMonitoring() && poll-- > 0) {
@@ -1339,6 +1409,11 @@ class Manager extends EventEmitter {
       // fresh entries. Keep noCache=false so the cache is merged — passing noCache=true
       // makes the SDK re-fetch from sequence 0 (dozens of BLE round-trips, unreliable).
       if (reload) lock.newEvents = true;
+      // Seul chemin qui utilise encore all=true, donc le backfill des trous anciens du
+      // SDK : c'est ici, et seulement ici, que l'utilisateur demande explicitement un
+      // rattrapage complet. Le chemin automatique passe par oplog.js (lecture
+      // incrémentale) — voir le commentaire d'en-tête de ce module pour pourquoi le
+      // backfill ne peut pas tenir dans un cycle automatique.
       const startedAt = Date.now();
       console.log('getOperationLog: starting full fetch for', address, reload ? '(reload)' : '');
       // Timeout: force-disconnect so the SDK's internal loop exits via the
@@ -1348,7 +1423,11 @@ class Manager extends EventEmitter {
       // et relâche le mutex, évitant "Command already in progress" sur la prochaine connexion.
       const OPLOG_TIMEOUT_MS = 120000;
       let timeoutHandle;
-      const operationsPromise = lock.getOperationLog(true, false);
+      // Le 3e argument borne les phases probe/backfill côté SDK (0.7.4+) : sans lui, le
+      // backfill continue de tourner après notre timeout et entre en collision avec la
+      // session BLE suivante. On garde une marge sous notre propre timeout pour que le
+      // SDK rende la main de lui-même plutôt que d'être coupé par la déconnexion forcée.
+      const operationsPromise = lock.getOperationLog(true, false, { maxDurationMs: OPLOG_TIMEOUT_MS - 10000 });
       const timeoutPromise = new Promise((_, reject) => {
         timeoutHandle = setTimeout(async () => {
           console.warn(`getOperationLog: timeout après ${OPLOG_TIMEOUT_MS / 1000}s pour ${address} — déconnexion forcée`);
@@ -1921,7 +2000,9 @@ class Manager extends EventEmitter {
    *
    * Skips locks with a BLE operation in flight (isLockBusy/waitingForConnect) so a
    * long read (e.g. the 120 s getOperationLog timeout) never gets mistaken for
-   * unreachability.
+   * unreachability. Skips the whole pass when the radio is not actually listening
+   * (gateway down / monitor dead): no advertisement reaches ANY lock in that state, so
+   * marking them offline would report a range problem that doesn't exist.
    */
   _startLockOfflineWatchdog() {
     if (this._lockOfflineWatchdog) return;
@@ -1929,6 +2010,19 @@ class Manager extends EventEmitter {
     this._lockOfflineWatchdog = setInterval(() => {
       const timeoutMs = (parseInt(process.env.LOCK_OFFLINE_TIMEOUT, 10) || 15) * 60 * 1000;
       const now = Date.now();
+      // _lastSeen n'est alimenté que par les advertisements, qui ne circulent qu'en mode
+      // monitor. Passerelle tombée ou monitor mort ⇒ plus aucun contact pour AUCUNE
+      // serrure : les marquer offline signalerait un problème de portée inexistant. On
+      // repousse _lastSeen pour que le compte à rebours reparte de la reprise du monitor.
+      const radioListening =
+        (this.gateway !== 'noble' || this.gatewayStatus === 'connected') &&
+        this.client?.isMonitoring?.() === true;
+      if (!radioListening) {
+        for (const address of this.pairedLocks.keys()) {
+          if (this._lastSeen.has(address)) this._lastSeen.set(address, now);
+        }
+        return;
+      }
       for (const [address, lock] of this.pairedLocks) {
         if (this.isLockBusy(address) || this._offlineLocks.has(address)) continue;
         const lastSeen = this._lastSeen.get(address);
@@ -1976,6 +2070,10 @@ class Manager extends EventEmitter {
     if (lock.isPaired()) {
       this.pairedLocks.set(lock.getAddress(), lock);
       this._touchLastSeen(lock);
+      // Nouvelle session : la prochaine déconnexion est un événement neuf, elle ne doit
+      // pas être avalée par la fenêtre de déduplication de _onLockDisconnected — la
+      // serrure peut se déconnecter moins d'une seconde après s'être connectée.
+      this._lastDisconnectAt.delete(lock.getAddress());
       console.log('Connected to paired lock ' + lock.getAddress());
       // One-time migration: persist deviceInfo if not yet stored (locks paired before v1.4.0)
       // Only run during initial monitor connects — NOT during user operations (would cause
@@ -2047,8 +2145,15 @@ class Manager extends EventEmitter {
    * @param {import('ttlock-sdk-js').TTLock} lock
    */
   async _onLockDisconnected(lock) {
-    console.log('Disconnected from lock ' + lock.getAddress());
     const address = lock.getAddress();
+    // Déduplication : le même `disconnected` remonte deux fois la pile BLE en mode
+    // gateway (cf. _lastDisconnectAt). Sans cette garde, startMonitor() et
+    // emit('lockUpdated') plus bas sont exécutés en double — scan relancé deux fois et
+    // republication MQTT redondante.
+    const previous = this._lastDisconnectAt.get(address);
+    this._lastDisconnectAt.set(address, Date.now());
+    if (previous !== undefined && Date.now() - previous < 1000) return;
+    console.log('Disconnected from lock ' + address);
     if (this.waitingForConnect.has(address)) {
       // A user operation is in progress — do not restart monitor, _releaseConnect handles it.
       return;
@@ -2103,14 +2208,12 @@ class Manager extends EventEmitter {
     // Strategy: never set lock.newEvents=false here except after a failed connect where we
     // genuinely want a retry on the next ad. For cooldown/busy paths we schedule a deferred
     // reset so the retry happens after the cooldown expires rather than immediately.
-    // Configurable via l'option addon `oplog_cooldown` (env OPLOG_COOLDOWN, en secondes).
-    // Défaut 10 s : compromis entre réactivité des capteurs MQTT (last_operation /
-    // last_access) et trafic BLE / batterie de la serrure. Défaut : 60 s — la serrure
-    // diffuse newEvents=true dans TOUS ses advertisements même après lecture ; sans ce
-    // cooldown, on se reconnecte toutes les ~15 s en permanence (drain de batterie).
-    // 60 s est un compromis : délai de notification max 60 s, ~1 connexion/minute.
-    // Réductible via l'option addon `oplog_cooldown` (en secondes) si plus de réactivité
-    // est souhaitée (ex. 20 s pour capturer les auto-verrouillages T+12 s).
+    // Configurable via l'option addon `oplog_cooldown` (env OPLOG_COOLDOWN, en secondes),
+    // défaut 60 s. La serrure diffuse newEvents=true dans TOUS ses advertisements même
+    // après lecture ; sans ce cooldown, on se reconnecte toutes les ~15 s en permanence
+    // (drain de batterie). 60 s est un compromis : délai de notification max 60 s,
+    // ~1 connexion/minute. Réductible via l'option si plus de réactivité est souhaitée
+    // (ex. 20 s pour capturer les auto-verrouillages T+12 s).
     const OPLOG_COOLDOWN_MS = (parseInt(process.env.OPLOG_COOLDOWN, 10) || 60) * 1000;
     // Circuit breaker : après des échecs consécutifs de connect(true)/admin-login,
     // _scheduleNewEventsBackoff ouvre une fenêtre de cooldown exponentielle. Tant
@@ -2294,6 +2397,7 @@ class Manager extends EventEmitter {
     // Prevent concurrent executions for the same lock
     if (lock._processingOperationLog) return false;
     lock._processingOperationLog = true;
+    lock._oplogAbandoned = false;
     try {
       // Guard secondaire : si la serrure s'est déconnectée entre le check dans
       // _handleNewEventsUpdate et ici (race condition), éviter de lire le cache.
@@ -2304,49 +2408,29 @@ class Manager extends EventEmitter {
       // autorisant le retour du cache oplog sans connexion admin réelle. On remet adminAuth
       // à false pour garantir que chaque appel à getOperationLog() ici effectue un vrai login.
       lock.adminAuth = false;
-      // Bound the read like the manual path (getOperationLog above): a record with a
-      // bad CRC makes the SDK's internal fetch loop re-read the same entries forever
-      // (the read pointer never advances), holding the BLE mutex indefinitely and
-      // starving every user op (unlock/lock) on _acquireMutex. Force-disconnect on
-      // timeout so the SDK loop exits via its `if(!isConnected) break` path and the
-      // mutex is released.
+      // Filet de sécurité : la lecture incrémentale est bornée par construction (sonde
+      // limitée + budget 20 s), mais une commande BLE peut rester bloquée jusqu'à 10 s.
+      // Au-delà du budget, on déconnecte pour que les boucles du SDK sortent via leur
+      // garde `isConnected()` et que le mutex BLE soit rendu aux opérations utilisateur.
+      const OPLOG_READ_TIMEOUT_MS = 45 * 1000;
       let timeoutHandle;
-      // Lecture COMPLÈTE (all=true) : le flux « new events » 0xffff du firmware ne renvoie
-      // PAS les enregistrements nouvellement ajoutés (cf. SDK TTLock.js — « New (appended)
-      // records are ONLY surfaced [par le probe au-delà de maxRecordNumber] : the 0xffff
-      // Phase 1 does not return them »). En all=false, le chemin automatique ne captait
-      // jamais les opérations postérieures au dernier record connu → journal et capteurs
-      // MQTT figés. all=true probe au-delà du max (exécuté AVANT le backfill, donc robuste
-      // aux déconnexions rapides de la serrure) et retourne le journal complet dense.
-      const operationsPromise = lock.getOperationLog(true, false);
+      const readPromise = readOperationLogIncremental(lock);
       const timeoutPromise = new Promise((_, reject) => {
         timeoutHandle = setTimeout(async () => {
-          console.warn(`_processOperationLog [${lock.getAddress()}]: lecture oplog bloquée (CRC corrompu?) — déconnexion forcée`);
+          console.warn(`_processOperationLog [${lock.getAddress()}]: lecture oplog trop longue (budget ${OPLOG_READ_TIMEOUT_MS / 1000}s dépassé) — déconnexion forcée`);
+          lock._oplogAbandoned = true;
           if (lock.isConnected()) await lock.disconnect().catch(() => {});
           await sleep(1000);
           reject(new Error('BLE timeout (_processOperationLog oplog read)'));
-        }, 30000);
+        }, OPLOG_READ_TIMEOUT_MS);
       });
-      let operations;
+      let readResult;
       try {
-        operations = await Promise.race([operationsPromise, timeoutPromise]);
+        readResult = await Promise.race([readPromise, timeoutPromise]);
       } finally {
         clearTimeout(timeoutHandle);
       }
-      // Vérifier adminAuth APRÈS l'appel. Le SDK le positionne à true uniquement si
-      // macro_adminLogin réussit (checkAdmin + checkRandom BLE) ET si la serrure ne
-      // s'est pas encore déconnectée (onDisconnected remet adminAuth à false). Si
-      // adminAuth est false ici, c'est soit un login raté (→ cache retourné) soit une
-      // déconnexion pendant la lecture (→ données partielles/invalides). Dans les deux
-      // cas : pas de vraie lecture BLE → ne pas resetter le circuit-breaker newEvents.
-      if (!lock.adminAuth) {
-        console.warn(`_processOperationLog [${lock.getAddress()}]: adminAuth absent — authentification admin BLE échouée ou déconnexion pendant la lecture`);
-        lock._lastOperationLogFetch = Date.now();
-        return false;
-      }
-      lock.newEvents = false;
-      lock._lastOperationLogFetch = Date.now();
-      if (!Array.isArray(operations)) return false;
+      const operations = Array.isArray(readResult.operations) ? readResult.operations : [];
       // Filtrer les opérations déjà traitées lors d'une lecture précédente.
       // Le firmware TTLock continue à retourner les mêmes entrées (ex. DOOR_SENSOR,
       // type=30) dans ses advertisements newEvents tant qu'elles ne sont pas
@@ -2359,14 +2443,8 @@ class Manager extends EventEmitter {
         lock._lastProcessedRecordNumber = store.getLastProcessedRecord(lock.getAddress());
       }
       let threshold = lock._lastProcessedRecordNumber;
-      // Détection d'un reset serrure (via l'addon, l'app TTLock officielle ou un
-      // remplacement du matériel) : le compteur d'enregistrements firmware repart de 0,
-      // donc le recordNumber le plus élevé observé devient INFÉRIEUR au seuil mémorisé.
-      // Sans resynchronisation, toutes les nouvelles ops (recordNumber <= seuil) seraient
-      // filtrées à jamais et les capteurs HA last_operation/last_access resteraient figés.
-      // On remet le seuil à 0 pour retraiter la lecture courante comme entièrement nouvelle.
-      // reduce plutôt que Math.max(...spread) : all=true retourne le journal complet
-      // (potentiellement des milliers d'entrées), au-delà de la limite d'arguments du spread.
+      // Parcours explicite plutôt que Math.max(...spread) : le journal peut compter des
+      // milliers d'entrées, au-delà de la limite d'arguments du spread.
       let maxObserved = 0;
       let sawRecord = false;
       for (const op of operations) {
@@ -2375,6 +2453,24 @@ class Manager extends EventEmitter {
           if (op.recordNumber > maxObserved) maxObserved = op.recordNumber;
         }
       }
+      // Succès = handshake admin confirmé PENDANT la lecture, ou à défaut des
+      // enregistrements réellement nouveaux. Sans handshake, getOperationLog renvoie
+      // silencieusement le cache SDK (cf. TTLock.js : `if (!adminOk) return this.operationLog`),
+      // indiscernable d'une lecture réussie — d'où ce garde-fou, qui évite de remettre à
+      // zéro le circuit-breaker newEvents sur une lecture fantôme.
+      if (!readResult.adminOk && !(sawRecord && maxObserved > threshold)) {
+        console.warn(`_processOperationLog [${lock.getAddress()}]: adminAuth absent — authentification admin BLE échouée ou déconnexion pendant la lecture`);
+        lock._lastOperationLogFetch = Date.now();
+        return false;
+      }
+      lock.newEvents = false;
+      lock._lastOperationLogFetch = Date.now();
+      // Détection d'un reset serrure (via l'addon, l'app TTLock officielle ou un
+      // remplacement du matériel) : le compteur d'enregistrements firmware repart de 0,
+      // donc le recordNumber le plus élevé observé devient INFÉRIEUR au seuil mémorisé.
+      // Sans resynchronisation, toutes les nouvelles ops (recordNumber <= seuil) seraient
+      // filtrées à jamais et les capteurs HA last_operation/last_access resteraient figés.
+      // On remet le seuil à 0 pour retraiter la lecture courante comme entièrement nouvelle.
       if (sawRecord && maxObserved < threshold) {
         console.warn(`_processOperationLog [${lock.getAddress()}]: recordNumber max ${maxObserved} < seuil ${threshold} — reset serrure détecté, resynchronisation du seuil à 0`);
         threshold = 0;
@@ -2382,8 +2478,8 @@ class Manager extends EventEmitter {
         store.setLastProcessedRecord(lock.getAddress(), 0);
       }
       const newOps = operations.filter(op => op.recordNumber > threshold);
-      // Résumé borné aux NOUVELLES opérations : all=true retourne le journal complet
-      // (jusqu'à MAX_OPLOG entrées), on ne veut pas déballer tout ça à chaque cycle.
+      // Résumé borné aux NOUVELLES opérations : `operations` est le journal complet en
+      // cache, on ne veut pas déballer tout ça à chaque cycle.
       const totalOps = operations.filter(Boolean).length;
       if (newOps.length > 0) {
         const maxRecord = newOps.reduce((m, op) => (op.recordNumber > m ? op.recordNumber : m), 0);
@@ -2429,6 +2525,10 @@ class Manager extends EventEmitter {
       return true;
     } catch (error) {
       console.error('_processOperationLog error:', error.message);
+      // Couper toute lecture encore en vol : sans ce drapeau, la sonde continuerait à
+      // émettre des commandes BLE après le retour de cette fonction, donc après le
+      // relâchement du mutex — et entrerait en collision avec la session suivante.
+      lock._oplogAbandoned = true;
       // Reset newEvents so the next advertisement doesn't immediately re-enter this path.
       // Also stamp _lastOperationLogFetch so the cooldown guard fires for 60s —
       // prevents a tight retry loop when the lock keeps disconnecting during the fetch.

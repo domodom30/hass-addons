@@ -66,7 +66,7 @@ init({
   gateway_pass: process.env.GATEWAY_PASS,
   // Cooldown en secondes entre deux lectures du journal opérationnel (option addon oplog_cooldown).
   // Manager.js lit process.env.OPLOG_COOLDOWN directement ; cette entrée documente le paramètre.
-  oplog_cooldown: parseInt(process.env.OPLOG_COOLDOWN, 10) || 10,
+  oplog_cooldown: parseInt(process.env.OPLOG_COOLDOWN, 10) || 60,
   // Minutes sans contact BLE avant qu'un lock ne soit publié 'offline' sur son topic de
   // disponibilité MQTT (option addon lock_offline_timeout). Manager.js lit
   // process.env.LOCK_OFFLINE_TIMEOUT directement ; cette entrée documente le paramètre.

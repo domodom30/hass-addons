@@ -1,6 +1,74 @@
 # Changelog
 
 
+## [2.6.5] — 2026-08-10
+
+### 🐛 Fixed
+
+- **The automatic log reader no longer locks itself into a permanent failure loop.**
+  Reading the journal with `all=true` (introduced in 2.6.4) makes the SDK re-walk *every*
+  sequence missing from its cache between 0 and the highest known record. Since the
+  persisted journal is deliberately capped (`max_oplog`, 300 by default), those gaps
+  number in the thousands and never close — the lock's journal is circular. Each cycle
+  therefore attempted thousands of BLE reads, blew through the 30 s budget, and — worse —
+  the SDK's backfill loop kept running after the forced disconnect, colliding with the
+  next session (`Command already in progress` → failed admin login → `adminAuth absent`).
+  The result was an endless `newEvents: échec #N` back-off and, eventually, a lock
+  reported offline.
+
+  The automatic path now reads incrementally (new `src/oplog.js`): the `0xffff` stream,
+  then a bounded probe for records appended past the last known one — never a backfill of
+  old gaps. A full catch-up is still available on demand through **Refresh** in the UI.
+
+- **A successful read is no longer reported as a failure.** Success was decided by
+  checking `lock.adminAuth` *after* the read; locks routinely self-disconnect right after
+  the last command, which resets that flag and triggered an unnecessary back-off. The
+  admin handshake is now recorded while the session is still alive.
+
+- **Duplicate `Disconnected from lock` events.** In gateway mode a single disconnect
+  travels the BLE stack twice, restarting the monitor and republishing to MQTT twice.
+  Duplicates within one second are now ignored.
+
+- **Locks are no longer marked offline when the radio itself is down.** The availability
+  watchdog only counts silence when the gateway is connected and the monitor is actually
+  running — otherwise *no* lock can be heard and the timeout said nothing about range.
+
+- **The `oplog_cooldown` option had no effect**: `start.sh` never exported it, so the
+  cooldown stayed pinned at 60 s whatever the configuration. It is exported now, and the
+  two contradictory defaults in the code (10 s / 60 s) are aligned on 60 s.
+  `oplog_cooldown`, `lock_offline_timeout` and `max_oplog` also appear in the add-on's
+  default options.
+
+- **Misleading log line**: `lecture oplog bloquée (CRC corrompu?)` pointed at a CRC
+  problem that cannot occur with the default `ignore_crc: true`. It now reports what
+  actually happened — the read exceeded its budget.
+
+- **SDK version drift between development and production.** `package-lock.json` (not
+  tracked by git) still pinned 0.7.2 while `package.json` asked for `^0.7.3`, so a local
+  checkout and the built image did not run the same SDK code. Both now agree on 0.7.4.
+
+- **A dead BLE monitor could pass for a healthy one.** Everything that restarts the scan
+  — `isMonitoring()`, `startMonitor()`'s idempotence guard, `_ensureMonitoring()` — trusts
+  the state the scanner reports about itself, and a gateway that dies without announcing
+  it leaves that state stuck on "scanning". Nothing could then repair it: the radio was
+  deaf, the add-on believed otherwise, and every lock eventually turned up `offline`.
+  A heartbeat now compares that claim against the only signal that cannot lie — incoming
+  BLE advertisements. Three minutes of silence while the monitor claims to be running
+  forces a full stop/start cycle (at most one every five minutes, so genuinely
+  out-of-range locks don't cause a loop), well before the 15-minute availability timeout.
+  The root cause is fixed on the SDK side in 0.7.4.
+
+### ⬆️ Dependencies
+
+- **`@domodom30/ttlock-sdk-js` 0.7.3 → 0.7.4.** Carries the two matching SDK-side fixes:
+  the operation-log backfill is now bounded (it stops when the link drops or its time
+  budget runs out, and never re-probes sequences the firmware already reported as
+  absent), and a gateway drop occurring before authentication now announces
+  `poweredOff` — without it the scanner stayed stuck on "scanning" with nothing
+  listening, which is the root cause the monitor heartbeat above only papers over.
+
+---
+
 ## [2.6.4] — 2026-08-09
 
 ### 🐛 Fixed
