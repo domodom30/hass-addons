@@ -22,7 +22,8 @@ import {
   latestUnlock,
   buildLastOperationPayload,
   buildOperationEventPayload,
-  OPERATION_EVENT_TYPES
+  OPERATION_EVENT_TYPES,
+  isNewerOperation
 } from './mqttTopics.js';
 
 // Read once at module load — used to populate the discovery `origin` block (HA
@@ -475,6 +476,7 @@ class HomeAssistant {
         await this.updateLockState(lock);
         await this.publishLastOperation(lock);
         await this.publishLastUnlock(lock);
+        await this._replayMissedEvents(lock);
       } catch (error) {
         console.error('MQTT republish error:', error.message);
       }
@@ -605,6 +607,24 @@ class HomeAssistant {
   }
 
   /**
+   * Publish one operation as a transient HA `event` and persist the
+   * `lastPublishedEvent` threshold on success. Shared by `_onLockOperation` (live,
+   * one call per new record) and `_replayMissedEvents` (catch-up on reconnect).
+   * @param {import('ttlock-sdk-js').TTLock} lock
+   * @param {object} op enriched operation (recordTypeCategory / recordTypeName set)
+   */
+  async _publishOperationEvent(lock, op) {
+    const address = lock.getAddress();
+    const id = lockIdFromAddress(address);
+    // NON-retained: an event is a point-in-time trigger, not a state to restore.
+    await this._publish(operationEventTopic(id), buildOperationEventPayload(op), {
+      retain: false,
+      qos: 1
+    });
+    store.setLastPublishedEvent(address, { recordNumber: op.recordNumber, operateDate: op.operateDate });
+  }
+
+  /**
    * A new operation was read from a lock's log (manager emits one `lockOperation`
    * per new record, in chronological order). Publish it as a transient HA `event`
    * so automations can react per operation and HA keeps a history — unlike the
@@ -615,14 +635,47 @@ class HomeAssistant {
   async _onLockOperation(lock, op) {
     if (!this.connected || !op) return;
     try {
-      const id = lockIdFromAddress(lock.getAddress());
-      // NON-retained: an event is a point-in-time trigger, not a state to restore.
-      await this._publish(operationEventTopic(id), buildOperationEventPayload(op), {
-        retain: false,
-        qos: 1
-      });
+      await this._publishOperationEvent(lock, op);
     } catch (error) {
       console.error('MQTT _onLockOperation error:', error.message);
+    }
+  }
+
+  /**
+   * Catch up on transient `operation` events that couldn't be published while MQTT
+   * was disconnected. `manager._processOperationLog` advances `lastProcessedRecord`/
+   * `lastProcessedDate` regardless of MQTT connectivity (other consumers, like the
+   * WebSocket UI, must keep working without MQTT), so an operation processed during
+   * an MQTT outage is never treated as "new" again — without this replay it would be
+   * silently dropped forever, which matters most for the ALARM category. Reads the
+   * persisted log only (no BLE) and is called once per (re)connect, from
+   * `_republishAll` — NOT from `_refreshLock`, which fires on every lock/unlock and
+   * is not a reconnect signal.
+   * @param {import('ttlock-sdk-js').TTLock} lock
+   */
+  async _replayMissedEvents(lock) {
+    if (!this.connected) return;
+    try {
+      const address = lock.getAddress();
+      let threshold = store.getLastPublishedEvent(address);
+      if (!threshold) {
+        // First run of this feature (fresh pair, or upgrade from a version that didn't
+        // track it) — same rule as the automatic path's "AMORÇAGE" resync: adopt the
+        // already-processed anchor as the baseline instead of replaying the entire
+        // persisted history as events, which would retroactively flood HA automations.
+        threshold = { recordNumber: store.getLastProcessedRecord(address), operateDate: store.getLastProcessedDate(address) };
+        store.setLastPublishedEvent(address, threshold);
+        return;
+      }
+      const ops = manager
+        .getPersistedOperationLog(address)
+        .filter((op) => isNewerOperation(op, threshold))
+        .sort((a, b) => (a.operateDate || 0) - (b.operateDate || 0) || (a.recordNumber || 0) - (b.recordNumber || 0));
+      for (const op of ops) {
+        await this._publishOperationEvent(lock, op);
+      }
+    } catch (error) {
+      console.error('MQTT _replayMissedEvents error:', error.message);
     }
   }
 

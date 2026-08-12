@@ -1,6 +1,35 @@
 # Changelog
 
 
+## [2.6.9] — 2026-08-12
+
+### 🐛 Fixed
+
+- **Transient `operation` events silently lost when MQTT was disconnected.** The `event`
+  entity is only published if `this.connected` is true at the moment `_onLockOperation`
+  fires. Since `manager._processOperationLog` advances the `lastProcessedRecord` /
+  `lastProcessedDate` thresholds independently of MQTT connectivity (other consumers,
+  like the WebSocket UI, must keep working without MQTT), an operation processed during
+  an outage was never treated as "new" again — the event was gone for good, which
+  mattered most for the `ALARM` category. A new persisted threshold
+  (`lastPublishedEvent`) now lets `ha.js` replay any missed transient events once per
+  (re)connect, reading the persisted log only (no BLE).
+- **Retroactive automation triggers after a manual "Refresh" in the UI.** `getOperationLog`
+  (the WebSocket UI's full BLE read) didn't advance `lastProcessedRecord` /
+  `lastProcessedDate`, so operations newer than the persisted threshold — already seen by
+  the user — could be re-discovered as "new" on the next automatic cycle and retroactively
+  emit `lockOperation` / `lockLock` / `lockUnlock`. The manual path now advances the same
+  thresholds, without emitting events, mirroring the existing `resynced` asymmetry in
+  `_processOperationLog`.
+
+### 🎨 UI / UX
+
+- **Activity log** (`LockLogsDialog.vue`): each entry's category tag is now translated
+  (FR/EN) instead of showing the raw `UNLOCK` / `LOCK` / `ALARM` / `FAILED` / `OTHER`
+  category in English regardless of locale. Added the missing Alarm / Failed / Other
+  filter buttons alongside the existing All / Unlock / Lock.
+
+
 ## [2.6.8] — 2026-08-10
 
 ### 📝 Changed

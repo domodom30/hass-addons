@@ -177,6 +177,25 @@ export function latestUnlock(operations) {
 }
 
 /**
+ * Is `entry` strictly more recent than `threshold`? Same rule used across the codebase
+ * for the oplog's circular buffer: `operateDate` is the only monotonic field, `recordNumber`
+ * only breaks ties at equal date. Shared by oplog.js (probe/dedup) and ha.js (replay of
+ * transient events missed while MQTT was disconnected) so the "newness" rule has one
+ * definition.
+ * @param {{operateDate?: number, recordNumber?: number}} entry
+ * @param {{operateDate?: number, recordNumber?: number}|null|undefined} threshold
+ * @returns {boolean}
+ */
+export function isNewerOperation(entry, threshold) {
+  if (!entry) return false;
+  if (!threshold) return true;
+  const entryDate = entry.operateDate || 0;
+  const thresholdDate = threshold.operateDate || 0;
+  if (entryDate !== thresholdDate) return entryDate > thresholdDate;
+  return (entry.recordNumber || 0) > (threshold.recordNumber || 0);
+}
+
+/**
  * Convert a TTLock compact date (YYYYMMDDHHmmss as integer or formatted string)
  * to a timezone-aware ISO 8601 string ("YYYY-MM-DDTHH:mm:ss±HH:MM") suitable for
  * HA `device_class: timestamp` sensors. Strips all non-digit characters so it

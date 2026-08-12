@@ -21,7 +21,8 @@ import {
   buildLastOperationPayload,
   buildOperationEventPayload,
   operationEventTopic,
-  OPERATION_EVENT_TYPES
+  OPERATION_EVENT_TYPES,
+  isNewerOperation
 } from '../src/mqttTopics.js';
 
 // operateDateToIso emits a timezone-aware ISO using the process TZ (DST-aware).
@@ -216,6 +217,25 @@ test('REMOVED_DISCOVERY_OBJECT_IDS: purge des entités retirées en 2.6.7', () =
     'homeassistant/sensor/e1581b3a605e/last_access_time/config',
     'homeassistant/sensor/e1581b3a605e/last_user/config'
   ]);
+});
+
+test('isNewerOperation: date puis recordNumber en départage, même règle que le journal circulaire', () => {
+  // Pas de seuil connu (jamais publié) -> tout est "nouveau".
+  assert.equal(isNewerOperation({ operateDate: 1, recordNumber: 1 }, null), true);
+  assert.equal(isNewerOperation({ operateDate: 1, recordNumber: 1 }, undefined), true);
+  // Pas d'entrée -> jamais "nouveau".
+  assert.equal(isNewerOperation(null, { operateDate: 1, recordNumber: 1 }), false);
+  // Date postérieure -> nouveau, même avec un recordNumber plus petit (journal circulaire).
+  assert.equal(
+    isNewerOperation({ operateDate: 20260810150408, recordNumber: 5 }, { operateDate: 20260810090716, recordNumber: 4997 }),
+    true
+  );
+  // Même date -> départage par recordNumber.
+  assert.equal(isNewerOperation({ operateDate: 1, recordNumber: 6 }, { operateDate: 1, recordNumber: 5 }), true);
+  assert.equal(isNewerOperation({ operateDate: 1, recordNumber: 5 }, { operateDate: 1, recordNumber: 5 }), false);
+  assert.equal(isNewerOperation({ operateDate: 1, recordNumber: 4 }, { operateDate: 1, recordNumber: 5 }), false);
+  // Date antérieure -> jamais nouveau, quel que soit recordNumber.
+  assert.equal(isNewerOperation({ operateDate: 1, recordNumber: 9999 }, { operateDate: 2, recordNumber: 1 }), false);
 });
 
 test('le payload event est autoportant: event_type + attributs, sans value_template', () => {

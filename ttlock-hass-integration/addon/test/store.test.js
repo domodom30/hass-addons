@@ -117,6 +117,39 @@ test('seuils de déduplication: recordNumber et operateDate persistés séparém
   }
 });
 
+test('lastPublishedEvent: seuil du rattrapage des événements transitoires MQTT', async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'ttlock-store-'));
+  const address = 'E4:5B:E2:5F:9C:B8';
+  try {
+    store.setDataPath(dir);
+    await store.loadData();
+
+    assert.equal(store.getLastPublishedEvent(address), null, 'rien publié pour l’instant');
+
+    store.setLastPublishedEvent(address, { recordNumber: 42, operateDate: 20260810090716 });
+    assert.deepEqual(store.getLastPublishedEvent(address), { recordNumber: 42, operateDate: 20260810090716 });
+
+    // Valeurs non numériques ignorées (pas d'écriture parasite).
+    store.setLastPublishedEvent(address, { recordNumber: 'nope', operateDate: 20260810090716 });
+    assert.deepEqual(store.getLastPublishedEvent(address), { recordNumber: 42, operateDate: 20260810090716 });
+
+    // Distinct de lastPublished.op/.unlock (capteurs retained) et de lastProcessedRecord/Date
+    // (seuil de traitement oplog) — les trois doivent pouvoir coexister indépendamment.
+    store.setLastPublishedRecord(address, 'op', 42);
+    store.setLastProcessedRecord(address, 42);
+    store.clearPublishedRecords(address);
+    assert.equal(store.getLastPublishedRecord(address, 'op'), undefined, 'lastPublished.op effacé');
+    assert.equal(store.getLastPublishedEvent(address), null, 'lastPublishedEvent aussi effacé au désappairage');
+    assert.equal(store.getLastProcessedRecord(address), 42, 'lastProcessedRecord non affecté par clearPublishedRecords');
+
+    await store.saveData();
+    const saved = JSON.parse(await fs.readFile(path.join(dir, 'deviceInfoData.json'), 'utf8'));
+    assert.equal(saved[address].lastPublishedEvent, undefined);
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true });
+  }
+});
+
 test('intégration disque: round-trip creux-avec-null → dense (save) → creux (load) sans null', async () => {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'ttlock-store-'));
   try {

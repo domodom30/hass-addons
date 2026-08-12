@@ -2,6 +2,7 @@ import EventEmitter from 'node:events';
 import https from 'node:https';
 import store from './store.js';
 import { readOperationLogIncremental, selectNewOperations } from './oplog.js';
+import { latestOperation } from './mqttTopics.js';
 import { shouldForceMonitorRecovery, MONITOR_SILENCE_MS } from './monitorHealth.js';
 import { TTLockClient, AudioManage, LockedStatus, LogOperateCategory, LogOperateNames } from '@domodom30/ttlock-sdk-js';
 
@@ -1442,9 +1443,31 @@ class Manager extends EventEmitter {
       } finally {
         clearTimeout(timeoutHandle);
       }
-      const operations = structuredClone(rawOps);
-      console.log(`getOperationLog: ${operations.filter(Boolean).length} entries for ${address} in ${Date.now() - startedAt}ms`);
-      return operations.filter(Boolean).map((op) => this._enrichOperation(op));
+      const operations = structuredClone(rawOps).filter(Boolean);
+      console.log(`getOperationLog: ${operations.length} entries for ${address} in ${Date.now() - startedAt}ms`);
+      // Cette lecture manuelle ne passe pas par _processOperationLog : sans ceci, les
+      // seuils lastProcessedRecord/lastProcessedDate resteraient en retard sur ce que
+      // l'utilisateur vient de voir dans l'UI, et le prochain cycle automatique
+      // retrouverait ces mêmes opérations "nouvelles" — ré-émettant rétroactivement
+      // lockOperation/lockLock/lockUnlock pour des faits déjà connus. On avance donc les
+      // mêmes seuils ici, SANS émettre d'événement (même asymétrie intentionnelle que le
+      // cas `resynced` de _processOperationLog : ce n'est qu'un rattrapage de seuil, pas
+      // un nouvel évènement à notifier).
+      if (lock._lastProcessedRecordNumber === undefined) {
+        lock._lastProcessedRecordNumber = store.getLastProcessedRecord(address);
+      }
+      if (lock._lastProcessedDate === undefined) {
+        lock._lastProcessedDate = store.getLastProcessedDate(address);
+      }
+      const { lastRecord, lastDate } = selectNewOperations(operations, latestOperation(operations), {
+        lastRecord: lock._lastProcessedRecordNumber,
+        lastDate: lock._lastProcessedDate
+      });
+      lock._lastProcessedRecordNumber = lastRecord;
+      lock._lastProcessedDate = lastDate;
+      store.setLastProcessedRecord(address, lastRecord);
+      store.setLastProcessedDate(address, lastDate);
+      return operations.map((op) => this._enrichOperation(op));
     } catch (error) {
       if (error?.message?.includes('No response to checkAdmin')) {
         // Le SDK a déjà loggé la stack trace via [ttlock:api] — on émet juste le contexte

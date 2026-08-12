@@ -191,6 +191,9 @@
     "typeAll": "Tous",
     "typeLock": "Verrouillage",
     "typeUnlock": "Déverrouillage",
+    "typeAlarm": "Alarme",
+    "typeFailed": "Échec",
+    "typeOther": "Autre",
     "empty": "Aucune opération à afficher"
   },
   "aliases": {

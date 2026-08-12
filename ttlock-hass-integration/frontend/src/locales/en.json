@@ -191,6 +191,9 @@
     "typeAll": "All",
     "typeLock": "Lock",
     "typeUnlock": "Unlock",
+    "typeAlarm": "Alarm",
+    "typeFailed": "Failed",
+    "typeOther": "Other",
     "empty": "No operations to display"
   },
   "aliases": {

@@ -27,7 +27,7 @@
  * nouveauté est la date, seule grandeur monotone du journal.
  */
 
-import { latestOperation } from './mqttTopics.js';
+import { latestOperation, isNewerOperation } from './mqttTopics.js';
 
 /** Sondes vides consécutives avant d'admettre qu'il n'y a plus rien à lire. */
 export const PROBE_MAX_CONSECUTIVE_EMPTY = 5;
@@ -48,14 +48,6 @@ export const PROBE_BUDGET_MS = 20 * 1000;
 export function newestRecord(lock) {
   if (!lock || !Array.isArray(lock.operationLog)) return null;
   return latestOperation(lock.operationLog);
-}
-
-/** Un enregistrement est-il postérieur à la tête ? (date, puis recordNumber en départage) */
-function isAfter(entry, head) {
-  const entryDate = entry.operateDate || 0;
-  const headDate = head.operateDate || 0;
-  if (entryDate !== headDate) return entryDate > headDate;
-  return (entry.recordNumber || 0) > (head.recordNumber || 0);
 }
 
 /**
@@ -107,7 +99,7 @@ export async function probeAppendedOperations(lock, head) {
       if (response === null) break;
       nextSequence = response.sequence;
       for (const entry of response.data || []) {
-        if (entry && typeof entry.recordNumber === 'number' && isAfter(entry, cursor)) {
+        if (entry && typeof entry.recordNumber === 'number' && isNewerOperation(entry, cursor)) {
           lock.operationLog[entry.recordNumber] = entry;
           cursor = entry; // la tête suit l'écriture du firmware
           producedNewRecord = true;

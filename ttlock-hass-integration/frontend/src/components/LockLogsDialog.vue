@@ -41,6 +41,27 @@
             </template>
             {{ $t('operations.typeLock') }}
           </v-btn>
+
+          <v-btn value="ALARM" size="small" variant="tonal">
+            <template #prepend>
+              <v-icon color="warning">mdi-bell-alert</v-icon>
+            </template>
+            {{ $t('operations.typeAlarm') }}
+          </v-btn>
+
+          <v-btn value="FAILED" size="small" variant="tonal">
+            <template #prepend>
+              <v-icon color="warning">mdi-alert-circle</v-icon>
+            </template>
+            {{ $t('operations.typeFailed') }}
+          </v-btn>
+
+          <v-btn value="OTHER" size="small" variant="tonal">
+            <template #prepend>
+              <v-icon color="info">mdi-information-outline</v-icon>
+            </template>
+            {{ $t('operations.typeOther') }}
+          </v-btn>
         </v-btn-toggle>
 
         <v-tooltip :text="$t('common.refresh')" location="bottom">
@@ -173,6 +194,13 @@ export default {
         failed: { icon: 'mdi-alert-circle',        color: 'warning' },
         other:  { icon: 'mdi-information-outline', color: 'info' },
       }
+      const TAG_KEYS = {
+        unlock: 'operations.typeUnlock',
+        lock:   'operations.typeLock',
+        alarm:  'operations.typeAlarm',
+        failed: 'operations.typeFailed',
+        other:  'operations.typeOther',
+      }
       return this.rawOperations
         .filter(op => this.filter === "ALL" || op.recordTypeCategory === this.filter)
         .map(op => {
@@ -185,7 +213,7 @@ export default {
             kind,
             icon: ICONS[kind].icon,
             color: ICONS[kind].color,
-            tag: op.recordTypeCategory || "OTHER",
+            tag: this.$t(TAG_KEYS[kind]),
             time: m.isValid() ? m.format("DD-MM HH:mm:ss") : "—",
             lockName: op._lockName,
             message: op.recordTypeName || "—",

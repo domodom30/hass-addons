@@ -274,10 +274,47 @@ class Store {
 
   /** Forget the published-record bookkeeping for a lock (called on unpair). */
   clearPublishedRecords(address) {
-    if (this.deviceInfoData[address]?.lastPublished) {
-      delete this.deviceInfoData[address].lastPublished;
-      this.saveData();
+    const entry = this.deviceInfoData[address];
+    if (!entry) return;
+    let changed = false;
+    if (entry.lastPublished) {
+      delete entry.lastPublished;
+      changed = true;
     }
+    if (entry.lastPublishedEvent) {
+      delete entry.lastPublishedEvent;
+      changed = true;
+    }
+    if (changed) this.saveData();
+  }
+
+  /**
+   * Persist the last operation successfully published as a transient MQTT `event`
+   * (the `operation` entity — non-retained). Distinct from `lastPublished.op`/`.unlock`
+   * (which track the *retained* sensors, always resynced from the latest operation) and
+   * from `lastProcessedRecord`/`lastProcessedDate` (which track oplog processing,
+   * independent of whether MQTT was reachable). Needs both `recordNumber` and
+   * `operateDate`, like the oplog thresholds, so catch-up after a reconnect stays
+   * correct across the firmware's circular log — see ha.js `_replayMissedEvents`.
+   * @param {string} address Lock MAC address
+   * @param {{recordNumber?: number, operateDate?: number}} threshold
+   */
+  setLastPublishedEvent(address, { recordNumber, operateDate } = {}) {
+    if (!address || typeof recordNumber !== 'number' || typeof operateDate !== 'number') return;
+    if (!this.deviceInfoData[address]) this.deviceInfoData[address] = {};
+    const current = this.deviceInfoData[address].lastPublishedEvent;
+    if (current && current.recordNumber === recordNumber && current.operateDate === operateDate) return; // no-op
+    this.deviceInfoData[address].lastPublishedEvent = { recordNumber, operateDate };
+    this.saveData();
+  }
+
+  /**
+   * @param {string} address Lock MAC address
+   * @returns {{recordNumber: number, operateDate: number}|null} last published event
+   *   threshold, or null if none published yet (everything persisted is "new").
+   */
+  getLastPublishedEvent(address) {
+    return this.deviceInfoData[address]?.lastPublishedEvent || null;
   }
 
   /**
