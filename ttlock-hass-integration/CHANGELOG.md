@@ -1,6 +1,32 @@
 # Changelog
 
 
+## [2.7.1] — 2026-08-24
+
+### ✨ Added
+
+- **Top bar title reflects the actual operating mode.** It now reads
+  "Gateway mode" when a remote noble/ESP32 gateway is configured, or
+  "Bluetooth mode" for a direct local BLE adapter, instead of always
+  showing a hardcoded Bluetooth-mode label — reuses the same
+  `gatewayStatus` signal already driving the gateway status chip.
+- **Activity log event descriptions are now translated (FR/EN).** Entries
+  like "Door sensor lock", "IC card unlock" or "Door sensor opened" were
+  shown as raw English strings straight from the SDK's `LogOperateNames`
+  table. All 50 log-event types are now translated, keyed by their numeric
+  `recordType` code (not by matching the English text, so it won't silently
+  break if the SDK rewords something) — any future/unmapped code still
+  falls back to the raw backend string.
+
+### 🔧 Changed
+
+- **Deployed frontend bundle resynced with source.** `addon/frontend/` (the
+  static bundle actually served — the Docker build does not compile the Vue
+  source) hadn't been rebuilt since before 2.7.0, so none of that release's
+  UI work, nor the version badge itself, was actually live. Rebuilt and
+  redeployed.
+
+
 ## [2.7.0] — 2026-08-24
 
 ### ⬆️ Dependencies

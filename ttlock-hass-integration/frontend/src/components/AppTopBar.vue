@@ -12,7 +12,7 @@
       <!-- Titre + version non cliquables -->
       <div class="d-flex flex-column">
         <span class="text-body-1 font-weight-bold">
-          TTLock in Bluetooth mode
+          {{ modeTitle }}
         </span>
 
         <div class="d-flex align-center ga-1">
@@ -328,6 +328,11 @@ export default {
     },
     showGatewayChip() {
       return this.gatewayStatus !== "n/a" && this.gatewayStatus !== "";
+    },
+    modeTitle() {
+      return this.showGatewayChip
+        ? this.$t("app.modeGateway")
+        : this.$t("app.modeBluetooth");
     },
     gatewayChipColor() {
       switch (this.gatewayStatus) {
