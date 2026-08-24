@@ -20,50 +20,6 @@
           </div>
         </div>
 
-        <v-btn-toggle v-model="filter" density="compact" variant="outlined" divided mandatory class="filter-toggle ga-2">
-          <v-btn value="ALL" size="small" variant="tonal">
-            <template #prepend>
-              <v-icon color="warning">mdi-filter-variant</v-icon>
-            </template>
-            {{ $t('operations.typeAll') }}
-          </v-btn>
-
-          <v-btn value="UNLOCK" size="small" variant="tonal">
-            <template #prepend>
-              <v-icon color="success">mdi-lock-open-variant</v-icon>
-            </template>
-            {{ $t('operations.typeUnlock') }}
-          </v-btn>
-
-          <v-btn value="LOCK" size="small" variant="tonal">
-            <template #prepend>
-              <v-icon color="error">mdi-lock</v-icon>
-            </template>
-            {{ $t('operations.typeLock') }}
-          </v-btn>
-
-          <v-btn value="ALARM" size="small" variant="tonal">
-            <template #prepend>
-              <v-icon color="warning">mdi-bell-alert</v-icon>
-            </template>
-            {{ $t('operations.typeAlarm') }}
-          </v-btn>
-
-          <v-btn value="FAILED" size="small" variant="tonal">
-            <template #prepend>
-              <v-icon color="warning">mdi-alert-circle</v-icon>
-            </template>
-            {{ $t('operations.typeFailed') }}
-          </v-btn>
-
-          <v-btn value="OTHER" size="small" variant="tonal">
-            <template #prepend>
-              <v-icon color="info">mdi-information-outline</v-icon>
-            </template>
-            {{ $t('operations.typeOther') }}
-          </v-btn>
-        </v-btn-toggle>
-
         <v-tooltip :text="$t('common.refresh')" location="bottom">
           <template #activator="{ props }">
             <v-btn
@@ -81,6 +37,18 @@
       </div>
 
       <div class="d-flex align-center flex-wrap ga-3 px-5 pb-3">
+        <v-select
+          v-model="filter"
+          :items="filterOptions"
+          item-title="title"
+          item-value="value"
+          :label="$t('operations.filterByType')"
+          density="compact"
+          variant="outlined"
+          hide-details
+          style="max-width: 170px"
+        />
+
         <v-select
           v-if="!address"
           v-model="lockFilter"
@@ -219,6 +187,16 @@ export default {
       return lock?.name || this.address
     },
 
+    filterOptions() {
+      return [
+        { title: this.$t('operations.typeAll'), value: 'ALL' },
+        { title: this.$t('operations.typeUnlock'), value: 'UNLOCK' },
+        { title: this.$t('operations.typeLock'), value: 'LOCK' },
+        { title: this.$t('operations.typeAlarm'), value: 'ALARM' },
+        { title: this.$t('operations.typeFailed'), value: 'FAILED' },
+        { title: this.$t('operations.typeOther'), value: 'OTHER' },
+      ]
+    },
     lockOptions() {
       return [
         { title: this.$t('operations.typeAll'), value: 'ALL' },
@@ -355,9 +333,6 @@ export default {
 .font-mono {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-size: 0.72rem;
-}
-.filter-toggle :deep(.v-btn) {
-  padding-inline: 12px;
 }
 .logs-scroll {
   overflow-y: auto;
