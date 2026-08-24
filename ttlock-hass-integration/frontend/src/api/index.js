@@ -396,7 +396,7 @@ class Api {
     if (data.config === undefined) {
       this.store.commit('setWaitingConfig', false);
       if (data.set !== true) {
-        this.store.commit('setError', data.set);
+        this.store.commit('setError', { message: data.set });
       }
     } else {
       this.store.commit('setConfig', data.config);

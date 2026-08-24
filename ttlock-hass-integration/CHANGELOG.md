@@ -1,6 +1,50 @@
 # Changelog
 
 
+## [2.7.0] — 2026-08-24
+
+### ⬆️ Dependencies
+
+- **`@domodom30/ttlock-sdk-js` 0.7.4 → 0.8.0.** `NobleDevice.connect()` no
+  longer polls `connected` every 100 ms against a fixed cycle budget; it now
+  settles directly on noble's native connect callback (success or error),
+  with the timeout timer cleared the instant that callback fires and a late
+  callback after timeout safely ignored — removing a race that could tear
+  down a connection that had actually just succeeded. `AudioManage` is split
+  into `AudioManage` (`TURN_ON`/`TURN_OFF`, unchanged values) and a new
+  `AudioManageOperation` (`QUERY`/`MODIFY`); the add-on only ever used
+  `TURN_ON`/`TURN_OFF` (`manager.js`), so no source change is required.
+
+### 🐛 Fixed
+
+- **Connect wrapper timeout too tight for the new SDK connect budget
+  (issue #25).** `_connectAttempt` wrapped `lock.connect()` in a 15s timeout,
+  but the SDK's own connect budget — native noble connect (~10s) + GATT
+  reads + `TTLock.connect()`'s completion poll (~15s) — can run up to ~25s.
+  On a weak link the wrapper could abort a connection the SDK was still
+  legitimately completing, producing a contradictory "failed (returned
+  false)" right as the handshake actually succeeded. The wrapper timeout is
+  now 28s, safely above the SDK's own ceiling.
+- **Credential/config dialogs silently closed on failure.** `Card.vue`,
+  `Passcode.vue`, `Finger.vue` and `ConfigDlg.vue` all closed themselves as
+  soon as the relevant "waiting" flag cleared, whether the save had
+  succeeded or the backend had just reported an error — the only visible
+  feedback was an easy-to-miss error toast elsewhere on screen. Each dialog
+  now remembers the error count right before saving and only auto-closes if
+  no new error appeared while waiting. `ConfigDlg.vue` additionally had
+  `busy` reset by its own save method rather than by the "waiting" watcher,
+  which silently defeated any such check since the fire-and-forget WebSocket
+  send resolves long before the real server response; that premature reset
+  is now removed.
+
+### ✨ Added
+
+- **Activity log: filter by lock and by date range.** Alongside the existing
+  category filter, the global "all locks" view can now be narrowed to a
+  single lock, and any view can be restricted to a date range — both
+  client-side, no backend change needed.
+
+
 ## [2.6.9] — 2026-08-12
 
 ### 🐛 Fixed

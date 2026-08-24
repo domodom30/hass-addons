@@ -204,6 +204,7 @@ export default {
     async saveFinger() {
       if (this.busy) return
       this.busy = true
+      this._errorCount = this.$store.state.errors.length
       // Vuetify 3 v-date-picker / v-time-picker may emit Date objects (not strings)
       // once the user interacts with them — coerce defensively.
       const fmt = (date, time) => {
@@ -232,8 +233,10 @@ export default {
     },
     storeIsWaiting(newVal) {
       if (newVal === false && this.busy) {
-        this.$emit("cancel")
         this.busy = false
+        if (this.$store.state.errors.length === this._errorCount) {
+          this.$emit("cancel")
+        }
       }
     },
     finger(newVal) {

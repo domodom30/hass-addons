@@ -75,12 +75,9 @@ export default {
     async saveConfig() {
       if (this.busy || !this.configValid) return
       this.busy = true
-      try {
-        const data = JSON.parse(this.configText)
-        await this.$store.dispatch("saveConfig", JSON.stringify(data))
-      } finally {
-        this.busy = false
-      }
+      this._errorCount = this.$store.state.errors.length
+      const data = JSON.parse(this.configText)
+      await this.$store.dispatch("saveConfig", JSON.stringify(data))
     },
     cancelConfig() {
       this.$store.commit("setConfig", "")
@@ -111,8 +108,10 @@ export default {
     },
     waitingConfig(newVal) {
       if (newVal === false && this.busy === true) {
-        this.$emit("cancel")
         this.busy = false
+        if (this.$store.state.errors.length === this._errorCount) {
+          this.$emit("cancel")
+        }
       }
     },
   },

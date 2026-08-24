@@ -295,10 +295,10 @@ export default {
   },
   computed: {
     version() {
-      return import.meta.env.VITE_APP_VERSION || "2.5.0";
+      return import.meta.env.VITE_APP_VERSION;
     },
     github() {
-      return import.meta.env.VITE_APP_GITHUB || " ";
+      return import.meta.env.VITE_APP_GITHUB;
     },
     startupStatus() {
       return this.$store.state.startupStatus;

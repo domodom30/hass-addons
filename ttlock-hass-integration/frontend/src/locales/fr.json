@@ -188,6 +188,8 @@
     "lock": "Serrure",
     "filterByLock": "Filtrer par serrure",
     "filterByType": "Filtrer par type",
+    "dateFrom": "Du",
+    "dateTo": "Au",
     "typeAll": "Tous",
     "typeLock": "Verrouillage",
     "typeUnlock": "Déverrouillage",

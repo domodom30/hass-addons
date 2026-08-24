@@ -1,5 +1,5 @@
 <template>
-  <v-card :loading="busy" class="lock-card pa-0 d-flex flex-column h-100">
+  <v-card :loading="waiting" class="lock-card pa-0 d-flex flex-column h-100">
     <!-- Header -->
     <div class="d-flex align-start pa-4 pb-3">
       <div class="flex-grow-1 overflow-hidden">
@@ -107,8 +107,8 @@
         variant="flat"
         color="primary"
         prepend-icon="mdi-bluetooth-connect"
-        :loading="busy"
-        :disabled="busy"
+        :loading="waiting"
+        :disabled="waiting"
         class="flex-grow-1"
         @click="pairLock"
         >{{ $t("lock.pair") }}</v-btn
@@ -221,7 +221,7 @@
 export default {
   props: ["lock"],
   data() {
-    return { busy: false, renameDialog: false, renameValue: "" };
+    return { renameDialog: false, renameValue: "" };
   },
   computed: {
     canLock() {
@@ -295,8 +295,7 @@ export default {
   },
   methods: {
     async unlockLock() {
-      if (this.busy) return;
-      this.busy = true;
+      if (this.waiting) return;
       try {
         await this.$store.dispatch("unlock", this.lock.address);
       } catch (error) {
@@ -304,8 +303,7 @@ export default {
       }
     },
     async lockLock() {
-      if (this.busy) return;
-      this.busy = true;
+      if (this.waiting) return;
       try {
         await this.$store.dispatch("lock", this.lock.address);
       } catch (error) {
@@ -313,8 +311,7 @@ export default {
       }
     },
     async pairLock() {
-      if (this.busy) return;
-      this.busy = true;
+      if (this.waiting) return;
       try {
         await this.$store.dispatch("pair", this.lock.address);
       } catch (error) {
@@ -339,11 +336,6 @@ export default {
       } catch (error) {
         console.error(error);
       }
-    },
-  },
-  watch: {
-    waiting(newVal) {
-      if (!newVal) this.busy = false;
     },
   },
 };

@@ -188,6 +188,8 @@
     "lock": "Lock",
     "filterByLock": "Filter by lock",
     "filterByType": "Filter by type",
+    "dateFrom": "From",
+    "dateTo": "To",
     "typeAll": "All",
     "typeLock": "Lock",
     "typeUnlock": "Unlock",

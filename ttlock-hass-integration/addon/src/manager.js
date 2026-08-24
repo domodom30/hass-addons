@@ -1635,7 +1635,13 @@ class Manager extends EventEmitter {
   async _connectAttempt(lock, address, needsAdmin, attempt) {
     try {
       console.log(`Connect attempt ${attempt}/4 to ${address}`);
-      const res = await withTimeout(lock.connect(false), 15000, 'connect ' + address);
+      // This wrapper timeout MUST stay larger than the SDK's own internal connect budget,
+      // otherwise we abort a connection the SDK is still completing: on a weak link the
+      // handshake finishes a moment later ('Connected to paired lock') and that late success
+      // races with our teardown — the exact contradictory 'failed (returned false)' seen in
+      // issue #25. SDK budget ≈ NobleDevice native connect (10s) + TTBluetoothDevice GATT
+      // reads + TTLock.connect completion poll (15s) ≈ up to ~25s, so guard well above it.
+      const res = await withTimeout(lock.connect(false), 28000, 'connect ' + address);
       if (!res) {
         if (lock.connecting) {
           let wait = 30;

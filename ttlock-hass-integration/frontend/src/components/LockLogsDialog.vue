@@ -80,6 +80,59 @@
         <v-btn icon="mdi-close" variant="text" size="small" @click="close" />
       </div>
 
+      <div class="d-flex align-center flex-wrap ga-3 px-5 pb-3">
+        <v-select
+          v-if="!address"
+          v-model="lockFilter"
+          :items="lockOptions"
+          item-title="title"
+          item-value="value"
+          :label="$t('operations.filterByLock')"
+          density="compact"
+          variant="outlined"
+          hide-details
+          style="max-width: 220px"
+        />
+
+        <v-menu v-model="dateFromMenu" :close-on-content-click="false" transition="scale-transition">
+          <template #activator="{ props }">
+            <v-text-field
+              v-model="dateFrom"
+              :label="$t('operations.dateFrom')"
+              prepend-inner-icon="mdi-calendar-start"
+              readonly
+              clearable
+              v-bind="props"
+              density="compact"
+              variant="outlined"
+              hide-details
+              style="max-width: 170px"
+              @click:clear="dateFrom = ''"
+            />
+          </template>
+          <v-date-picker v-model="dateFrom" @update:modelValue="dateFromMenu = false" />
+        </v-menu>
+
+        <v-menu v-model="dateToMenu" :close-on-content-click="false" transition="scale-transition">
+          <template #activator="{ props }">
+            <v-text-field
+              v-model="dateTo"
+              :label="$t('operations.dateTo')"
+              prepend-inner-icon="mdi-calendar-end"
+              readonly
+              clearable
+              v-bind="props"
+              density="compact"
+              variant="outlined"
+              hide-details
+              style="max-width: 170px"
+              @click:clear="dateTo = ''"
+            />
+          </template>
+          <v-date-picker v-model="dateTo" @update:modelValue="dateToMenu = false" />
+        </v-menu>
+      </div>
+
       <v-divider />
 
       <!-- Journal des opérations -->
@@ -144,6 +197,11 @@ export default {
     return {
       filter: "ALL",
       autoScroll: true,
+      lockFilter: "ALL",
+      dateFrom: "",
+      dateFromMenu: false,
+      dateTo: "",
+      dateToMenu: false,
     }
   },
   computed: {
@@ -161,10 +219,21 @@ export default {
       return lock?.name || this.address
     },
 
+    lockOptions() {
+      return [
+        { title: this.$t('operations.typeAll'), value: 'ALL' },
+        ...this.$store.state.locks
+          .filter(l => l.paired)
+          .map(l => ({ title: l.name || l.address, value: l.address })),
+      ]
+    },
     rawOperations() {
       const ops = this.$store.state.operations
       const collected = []
-      const addresses = this.address ? [this.address] : Object.keys(ops)
+      let addresses = this.address ? [this.address] : Object.keys(ops)
+      if (!this.address && this.lockFilter !== "ALL") {
+        addresses = addresses.filter(a => a === this.lockFilter)
+      }
       for (const addr of addresses) {
         const lock = this.$store.state.locks.find(l => l.address === addr)
         const name = lock?.name || addr
@@ -203,6 +272,7 @@ export default {
       }
       return this.rawOperations
         .filter(op => this.filter === "ALL" || op.recordTypeCategory === this.filter)
+        .filter(op => this.inDateRange(op.operateDate))
         .map(op => {
           const kind = KIND_MAP[op.recordTypeCategory] ?? "other"
           const m = moment(op.operateDate, "YYYYMMDDHHmmss")
@@ -226,6 +296,9 @@ export default {
     open(now) {
       if (now) {
         this.filter = "ALL"
+        this.lockFilter = "ALL"
+        this.dateFrom = ""
+        this.dateTo = ""
         this.loadOperations()
         this.scrollToBottom()
       }
@@ -245,6 +318,21 @@ export default {
     },
     refresh() {
       this.loadOperations(true)
+    },
+    toDay(val) {
+      if (!val) return null
+      return val instanceof Date
+        ? moment(val).format("YYYYMMDD")
+        : moment(val, "YYYY-MM-DD").format("YYYYMMDD")
+    },
+    inDateRange(operateDate) {
+      if (!operateDate) return true
+      const day = operateDate.slice(0, 8)
+      const from = this.toDay(this.dateFrom)
+      const to = this.toDay(this.dateTo)
+      if (from && day < from) return false
+      if (to && day > to) return false
+      return true
     },
     close() {
       this.$store.commit("clearOverlay")

@@ -188,6 +188,7 @@ export default {
     async saveCard() {
       if (this.busy) return
       this.busy = true
+      this._errorCount = this.$store.state.errors.length
 
       const fmt = (date, time) => {
         const d = date instanceof Date ? moment(date).format("YYYY-MM-DD") : (date || "")
@@ -215,8 +216,10 @@ export default {
     },
     storeIsWaiting(newVal) {
       if (newVal === false && this.busy) {
-        this.$emit("cancel")
         this.busy = false
+        if (this.$store.state.errors.length === this._errorCount) {
+          this.$emit("cancel")
+        }
       }
     },
     card(newVal) {

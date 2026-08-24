@@ -210,6 +210,7 @@ export default {
       this.passcode.startDate = fmt(this.startDate, this.startTime)
       this.passcode.endDate = fmt(this.endDate, this.endTime)
       this.busy = true
+      this._errorCount = this.$store.state.errors.length
       await this.$store.dispatch("setPasscode", {
         lockAddress: this.address,
         passcode: this.passcode,
@@ -228,8 +229,10 @@ export default {
     },
     storeIsWaiting(newVal) {
       if (newVal === false && this.busy) {
-        this.$emit("cancel")
         this.busy = false
+        if (this.$store.state.errors.length === this._errorCount) {
+          this.$emit("cancel")
+        }
       }
     },
     passcode(newVal) {
