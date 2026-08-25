@@ -1,6 +1,6 @@
 {
   "name": "ttlock-hass-integration",
-  "version": "2.7.1",
+  "version": "2.7.2",
   "description": "Integration of the offline TTLock sdk into Home Assistant",
   "main": "index.js",
   "type": "module",
@@ -29,7 +29,7 @@
   },
   "homepage": "https://github.com/domodom30/hass-addons/tree/master/ttlock-hass-integration",
   "dependencies": {
-    "@domodom30/ttlock-sdk-js": "^0.8.0",
+    "@domodom30/ttlock-sdk-js": "^0.8.1",
     "async-mqtt": "^2.6.1",
     "express": "^4.17.1",
     "ws": "^7.4.2"

@@ -134,7 +134,10 @@ class Manager extends EventEmitter {
   async init() {
     if (this.client === undefined) {
       try {
-        let clientOptions = {};
+        // largeMtu: use the negotiated ATT MTU for BLE writes instead of fixed 20-byte chunks.
+        // No effect under noble-websocket (gateway) transport; auto-downgrades permanently to
+        // 20 bytes on the first failed write, so this is a safe opportunistic speed-up.
+        let clientOptions = { largeMtu: true };
 
         if (this.gateway == 'noble') {
           clientOptions.scannerType = 'noble-websocket';
@@ -1639,8 +1642,10 @@ class Manager extends EventEmitter {
       // otherwise we abort a connection the SDK is still completing: on a weak link the
       // handshake finishes a moment later ('Connected to paired lock') and that late success
       // races with our teardown — the exact contradictory 'failed (returned false)' seen in
-      // issue #25. SDK budget ≈ NobleDevice native connect (10s) + TTBluetoothDevice GATT
-      // reads + TTLock.connect completion poll (15s) ≈ up to ~25s, so guard well above it.
+      // issue #25. As of SDK >=0.8.1 the connect-completion wait is event-driven rather than
+      // a fixed ~15s poll, so the typical case is much faster — but a weak link can still
+      // consume the SDK's full internal budget, so this 28000ms guard stays as a deliberately
+      // conservative worst-case margin (not tuned down as part of the SDK bump).
       const res = await withTimeout(lock.connect(false), 28000, 'connect ' + address);
       if (!res) {
         if (lock.connecting) {

@@ -12,6 +12,7 @@ const store = createStore({
     gatewayStatus: 'n/a',
     gatewayHost: '',
     locks: [],
+    locksLoaded: false,
     passcodes: {},
     cards: {},
     fingers: {},
@@ -64,6 +65,7 @@ const store = createStore({
     },
     setLocks(state, locks) {
       state.locks = locks;
+      state.locksLoaded = true;
       state.waiting = false;
       state.waitingAddress = '';
     },

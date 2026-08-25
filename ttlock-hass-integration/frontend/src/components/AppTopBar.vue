@@ -15,7 +15,7 @@
           {{ modeTitle }}
         </span>
 
-        <div class="d-flex align-center ga-1">
+        <div v-if="!smAndDown" class="d-flex align-center ga-1">
           <span class="version-badge"> v{{ version }} </span>
 
           <v-tooltip text="GitHub" location="bottom">
@@ -39,7 +39,7 @@
 
     <!-- CENTRE : badges statut serrures -->
     <div
-      v-if="totalLocks > 0"
+      v-if="totalLocks > 0 && !smAndDown"
       class="badges-group d-flex align-center ga-3 px-3 py-1"
     >
       <!-- Total serrures -->
@@ -227,6 +227,27 @@
             />
           </template>
           <v-list density="compact" min-width="240">
+            <template v-if="smAndDown && totalLocks > 0">
+              <v-list-item>
+                <template #prepend>
+                  <v-icon size="18" color="primary" class="mr-3">mdi-lock-outline</v-icon>
+                </template>
+                <v-list-item-title class="text-caption">{{ $t('dashboard.totalLocks') }}: {{ totalLocks }}</v-list-item-title>
+              </v-list-item>
+              <v-list-item>
+                <template #prepend>
+                  <v-icon size="18" :color="connectedColor" class="mr-3">mdi-bluetooth-connect</v-icon>
+                </template>
+                <v-list-item-title class="text-caption">{{ $t('dashboard.connected') }}: {{ connectedLocks }}/{{ totalLocks }}</v-list-item-title>
+              </v-list-item>
+              <v-list-item v-if="lowBattery > 0">
+                <template #prepend>
+                  <v-icon size="18" color="warning" class="mr-3">mdi-battery-alert-variant-outline</v-icon>
+                </template>
+                <v-list-item-title class="text-caption">{{ $t('dashboard.lowBattery') }}: {{ lowBattery }}</v-list-item-title>
+              </v-list-item>
+              <v-divider class="my-1" />
+            </template>
             <v-list-item @click="openGlobalActivity">
               <template #prepend>
                 <v-icon color="success" size="18" class="mr-3"
@@ -286,12 +307,14 @@
 
 <script>
 import { useTheme } from "@/composables/useTheme";
+import { useDisplay } from "vuetify";
 
 export default {
   name: "AppTopBar",
   setup() {
     const { isDark, toggleTheme } = useTheme();
-    return { isDark, toggleTheme };
+    const { smAndDown } = useDisplay();
+    return { isDark, toggleTheme, smAndDown };
   },
   computed: {
     version() {

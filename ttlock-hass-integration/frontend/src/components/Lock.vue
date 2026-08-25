@@ -26,7 +26,9 @@
       class="lock-visual flex-grow-1 d-flex flex-column align-center justify-center px-4 py-4"
     >
       <div class="lock-icon-wrap mb-3" :class="`bg-${stateColor}-tonal`">
-        <v-icon :icon="stateIcon" :color="stateColor" size="36" />
+        <transition name="icon-swap" mode="out-in">
+          <v-icon :key="stateIcon" :icon="stateIcon" :color="stateColor" size="36" />
+        </transition>
       </div>
       <div class="d-flex align-center ga-1 flex-wrap justify-center">
         <v-chip
@@ -351,7 +353,7 @@ export default {
 .lock-card:hover {
   transform: translateY(-2px);
   border-color: rgb(var(--v-theme-primary));
-  box-shadow: 0 4px 18px -8px rgba(16, 185, 129, 0.25);
+  box-shadow: 0 4px 18px -8px rgba(var(--v-theme-primary), 0.35);
 }
 .font-mono {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
@@ -366,12 +368,21 @@ export default {
   justify-content: center;
 }
 .bg-success-tonal {
-  background: rgba(16, 185, 129, 0.12);
+  background: rgba(var(--v-theme-success), 0.12);
 }
 .bg-error-tonal {
-  background: rgba(239, 68, 68, 0.12);
+  background: rgba(var(--v-theme-error), 0.12);
 }
 .bg-secondary-tonal {
-  background: rgba(113, 113, 122, 0.12);
+  background: rgba(var(--v-theme-secondary), 0.12);
+}
+.icon-swap-enter-active,
+.icon-swap-leave-active {
+  transition: opacity 0.18s ease, transform 0.18s ease;
+}
+.icon-swap-enter-from,
+.icon-swap-leave-to {
+  opacity: 0;
+  transform: scale(0.75);
 }
 </style>

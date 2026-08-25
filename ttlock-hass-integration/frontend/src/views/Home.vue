@@ -4,7 +4,20 @@
     <div class="d-flex flex-wrap align-end justify-space-between mb-4 ga-3">
     </div>
 
-    <v-card v-if="totalLocks === 0" class="pa-8 text-center">
+    <v-row v-if="!locksLoaded" align="start">
+      <v-col cols="12" md="8" lg="9">
+        <v-row>
+          <v-col v-for="n in 3" :key="n" cols="12" sm="6" lg="4">
+            <v-skeleton-loader type="card" />
+          </v-col>
+        </v-row>
+      </v-col>
+      <v-col cols="12" md="4" lg="3">
+        <v-skeleton-loader type="list-item-two-line@3" />
+      </v-col>
+    </v-row>
+
+    <v-card v-else-if="totalLocks === 0" class="pa-8 text-center">
       <v-avatar size="64" color="primary" variant="tonal" class="mb-4">
         <v-icon size="32">mdi-lock-plus-outline</v-icon>
       </v-avatar>
@@ -57,7 +70,10 @@
             </div>
           </div>
 
-          <div v-if="lastFiveActions.length === 0" class="text-body-2 text-medium-emphasis py-2">—</div>
+          <div v-if="lastFiveActions.length === 0" class="d-flex flex-column align-center text-center py-6">
+            <v-icon size="28" color="medium-emphasis" class="mb-2">mdi-history</v-icon>
+            <span class="text-caption text-medium-emphasis">{{ $t('dashboard.noActivity') }}</span>
+          </div>
 
           <template v-for="(op, i) in lastFiveActions" :key="i">
             <v-divider v-if="i > 0" class="my-2" />
@@ -69,11 +85,11 @@
                 class="flex-shrink-0"
               />
               <div class="min-w-0" style="flex: 1">
-                <div class="text-caption font-weight-medium text-truncate" :title="op.recordTypeName">
-                  {{ op.recordTypeName || '—' }}
+                <div class="text-caption font-weight-medium text-truncate" :title="opLabel(op)">
+                  {{ opLabel(op) }}
                 </div>
                 <div class="text-caption text-medium-emphasis d-flex align-center justify-space-between ga-1">
-                  <span>{{ opDateTime(op) }}</span>
+                  <span :title="opDateTime(op)">{{ opRelativeTime(op) }}</span>
                   <span v-if="op.lockName" class="text-truncate" style="max-width: 80px; opacity: 0.7">{{ op.lockName }}</span>
                 </div>
               </div>
@@ -105,6 +121,9 @@ export default {
     },
     totalLocks() {
       return this.locks.length
+    },
+    locksLoaded() {
+      return this.$store.state.locksLoaded
     },
     lastFiveActions() {
       const all = []
@@ -153,6 +172,11 @@ export default {
     openGlobalActivity() {
       this.$store.commit("setOverlay", { overlay: "logs", address: null })
     },
+    opLabel(op) {
+      return this.$te(`operations.logType.${op.recordType}`)
+        ? this.$t(`operations.logType.${op.recordType}`)
+        : (op.recordTypeName || '—')
+    },
     opIcon(op) {
       if (op.recordTypeCategory === 'LOCK')   return 'mdi-lock'
       if (op.recordTypeCategory === 'UNLOCK') return 'mdi-lock-open-variant'
@@ -167,9 +191,16 @@ export default {
       if (op.recordTypeCategory === 'FAILED') return 'deep-orange'
       return 'info'
     },
+    _opMoment(op) {
+      return moment(op.operateDate, "YYYYMMDDHHmmss")
+    },
     opDateTime(op) {
-      const m = moment(op.operateDate, "YYYYMMDDHHmmss")
+      const m = this._opMoment(op)
       return m.isValid() ? m.format("DD-MM-YYYY HH:mm") : '—'
+    },
+    opRelativeTime(op) {
+      const m = this._opMoment(op)
+      return m.isValid() ? m.fromNow() : '—'
     },
   },
 }

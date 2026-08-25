@@ -1,6 +1,63 @@
 # Changelog
 
 
+## [2.7.2] — 2026-08-25
+
+### ⬆️ Dependencies
+
+- **`@domodom30/ttlock-sdk-js` 0.8.0 → 0.8.1.** Fewer BLE round-trips per
+  connect (`onConnected()`/`readBasicInfo()` now read and cache only what's
+  needed instead of every characteristic), the admin/user challenge path is
+  learned and persisted instead of guessed on every connection, and internal
+  polling loops (adapter-ready wait, connect completion, command responses)
+  are now event-driven instead of fixed-interval polls. The add-on also now
+  opts into the new `largeMtu` setting (`manager.js`), using the negotiated
+  ATT MTU for BLE writes instead of fixed 20-byte chunks in direct-BLE mode,
+  with an automatic permanent fallback to 20 bytes on the first failed
+  write — no effect under the `noble-websocket` gateway transport.
+
+### 🐛 Fixed
+
+- **Dashboard "Recent activity" widget events not translated.** The 2.7.1
+  fix for the full activity-log dialog (`LockLogsDialog.vue`) never reached
+  the separate, smaller "Recent activity" widget on the dashboard
+  (`Home.vue`), which still rendered the SDK's raw English
+  `recordTypeName` directly. It now goes through the same `recordType`-keyed
+  translation dictionary, with the same graceful fallback for any future
+  unmapped code.
+
+### 🎨 UI / UX
+
+- **Inconsistent colors now follow the live theme.** The lock card's hover
+  glow (`Lock.vue`) mixed a theme-aware border color with a hardcoded green
+  shadow left over from an old palette; and the tonal backgrounds behind the
+  lock-state icon were fixed rgba values that didn't track the light/dark
+  theme's actual `success`/`error`/`secondary` colors. Both now reference
+  the live Vuetify theme tokens.
+- **Recent-activity widget: relative timestamps and a real empty state.**
+  Entries now show a friendly relative time ("2 hours ago"/"il y a 2
+  heures", localized via `moment.locale()`, which was never being set) with
+  the exact timestamp still available on hover; the widget's "no activity"
+  state went from a bare "—" to a short icon + message.
+- **Top bar adapts to narrow screens.** The version badge, GitHub link and
+  the total/connected/low-battery badge group were rendered unconditionally
+  on a single row with no wrapping, risking crowding on phone-width screens
+  (a common way to open this add-on, via the Home Assistant companion app).
+  Below 960px those secondary elements are now hidden from the bar itself,
+  with the lock counts relocated into the existing overflow menu so no
+  information is lost.
+- **Skeleton loaders instead of a misleading empty state on first load.**
+  The dashboard showed the "no locks paired yet" card as soon as
+  `locks.length === 0`, which also happens to be true for a fraction of a
+  second before the backend's first WebSocket snapshot arrives — even for
+  an installation with locks already paired. A dedicated `locksLoaded` flag
+  now distinguishes "still loading" (shows skeleton placeholders) from
+  "genuinely no locks" (shows the existing empty-state card).
+- **Subtle transition on lock state icon changes.** The lock/unlock/unknown
+  icon in the middle of each lock card used to swap instantly; it now
+  fades and scales in over ~180ms.
+
+
 ## [2.7.1] — 2026-08-24
 
 ### ✨ Added

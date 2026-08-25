@@ -1,4 +1,6 @@
 import { createI18n as _createI18n } from 'vue-i18n'
+import moment from 'moment'
+import 'moment/locale/fr'
 import en from './locales/en.json'
 import fr from './locales/fr.json'
 
@@ -13,5 +15,6 @@ function getBrowserLocale() {
 export function createI18n() {
   const saved = localStorage.getItem('ttlock_locale')
   const locale = saved || getBrowserLocale()
+  moment.locale(locale)
   return _createI18n({ legacy: true, locale, fallbackLocale: 'en', messages })
 }
