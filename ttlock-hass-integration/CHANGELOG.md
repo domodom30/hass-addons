@@ -1,6 +1,22 @@
 # Changelog
 
 
+## [2.7.3] — 2026-08-25
+
+### 🎨 UI / UX
+
+- **Recent-activity widget: exact time as primary text, relative time moved
+  to a tooltip.** The 2.7.2 relative-time display ("2 hours ago") is more
+  useful as a hover detail than as the primary text for a security-relevant
+  log — the widget's main text is now the exact date/time, with the
+  relative time available on hover.
+- **Styled tooltips instead of the browser's native title tooltip.** The
+  event label and timestamp in the recent-activity widget now use
+  Vuetify's `v-tooltip`, matching the tooltip style already used elsewhere
+  in the app (e.g. the top bar's status badges) instead of the plain,
+  delayed native browser tooltip.
+
+
 ## [2.7.2] — 2026-08-25
 
 ### ⬆️ Dependencies

@@ -85,11 +85,19 @@
                 class="flex-shrink-0"
               />
               <div class="min-w-0" style="flex: 1">
-                <div class="text-caption font-weight-medium text-truncate" :title="opLabel(op)">
-                  {{ opLabel(op) }}
-                </div>
+                <v-tooltip :text="opLabel(op)" location="top">
+                  <template #activator="{ props }">
+                    <div v-bind="props" class="text-caption font-weight-medium text-truncate">
+                      {{ opLabel(op) }}
+                    </div>
+                  </template>
+                </v-tooltip>
                 <div class="text-caption text-medium-emphasis d-flex align-center justify-space-between ga-1">
-                  <span :title="opDateTime(op)">{{ opRelativeTime(op) }}</span>
+                  <v-tooltip :text="opRelativeTime(op)" location="top">
+                    <template #activator="{ props }">
+                      <span v-bind="props">{{ opDateTime(op) }}</span>
+                    </template>
+                  </v-tooltip>
                   <span v-if="op.lockName" class="text-truncate" style="max-width: 80px; opacity: 0.7">{{ op.lockName }}</span>
                 </div>
               </div>
