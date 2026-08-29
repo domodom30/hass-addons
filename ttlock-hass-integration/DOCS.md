@@ -44,8 +44,17 @@ gateway_debug: true // log websocket messages to and from the gateway
 lock_offline_timeout: 15 // minutes without BLE contact before a lock's MQTT entities are marked unavailable (default 15)
 max_oplog: 300 // maximum number of operation-log entries kept in the persisted journal (default 300)
 oplog_cooldown: 60 // seconds between two automatic operation-log reads (default 60)
+status_check_cooldown: 15 // seconds between two quick locked/unlocked state checks when the state is uncertain (default 15)
 ```
 
-Lowering `oplog_cooldown` makes new operations reach Home Assistant faster, at the cost
-of one extra BLE connection per lock per cycle — which the lock's battery pays for. 20
-seconds is low enough to catch an auto-lock a few seconds after an unlock.
+Lowering `oplog_cooldown` makes new operations (who unlocked, what type of event) reach
+Home Assistant faster, at the cost of one extra BLE connection per lock per cycle — which
+the lock's battery pays for.
+
+`status_check_cooldown` is a separate, lighter check: when the lock's advertisement can no
+longer vouch for the locked/unlocked state (e.g. after a door-sensor-triggered auto-lock,
+where the advertising bit that reliably signals "unlocked" simply clears without confirming
+a real re-lock), the addon opens a short BLE connection just to confirm the actual state —
+it does not read the operation log. This is what keeps the `lock` entity's locked/unlocked
+state accurate within a few seconds even when `oplog_cooldown` is still high; the operation
+detail (who/what triggered it) still follows on the normal `oplog_cooldown` cadence.

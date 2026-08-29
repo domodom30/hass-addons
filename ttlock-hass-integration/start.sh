@@ -9,6 +9,7 @@ export MQTT_DISCOVERY_PREFIX=$(bashio::config "discovery_prefix")
 export LOCK_OFFLINE_TIMEOUT=$(bashio::config "lock_offline_timeout")
 export MAX_OPLOG=$(bashio::config "max_oplog")
 export OPLOG_COOLDOWN=$(bashio::config "oplog_cooldown")
+export STATUS_CHECK_COOLDOWN=$(bashio::config "status_check_cooldown")
 # Aligne l'horloge du process sur le fuseau de Home Assistant : la serrure enregistre
 # l'heure locale, donc les timestamps du journal reçoivent ainsi l'offset (DST-correct)
 # attendu par les capteurs HA device_class: timestamp.

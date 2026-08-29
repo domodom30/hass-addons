@@ -67,6 +67,11 @@ init({
   // Cooldown en secondes entre deux lectures du journal opérationnel (option addon oplog_cooldown).
   // Manager.js lit process.env.OPLOG_COOLDOWN directement ; cette entrée documente le paramètre.
   oplog_cooldown: parseInt(process.env.OPLOG_COOLDOWN, 10) || 60,
+  // Cooldown en secondes entre deux vérifications rapides de l'état verrouillé/déverrouillé
+  // quand il devient incertain (option addon status_check_cooldown), ex. après un verrouillage
+  // déclenché par le capteur de porte. Manager.js lit process.env.STATUS_CHECK_COOLDOWN
+  // directement ; cette entrée documente le paramètre.
+  status_check_cooldown: parseInt(process.env.STATUS_CHECK_COOLDOWN, 10) || 15,
   // Minutes sans contact BLE avant qu'un lock ne soit publié 'offline' sur son topic de
   // disponibilité MQTT (option addon lock_offline_timeout). Manager.js lit
   // process.env.LOCK_OFFLINE_TIMEOUT directement ; cette entrée documente le paramètre.

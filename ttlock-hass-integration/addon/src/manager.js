@@ -2433,6 +2433,61 @@ class Manager extends EventEmitter {
   }
 
   /**
+   * Vérification rapide et découplée de l'état verrouillé/déverrouillé, pour le cas où
+   * le bit `isUnlock` de l'advertisement retombe (ex. verrouillage déclenché par le
+   * capteur de porte) : le SDK ne peut alors pas fiabiliser lockedStatus depuis le cache
+   * (voir TTLockApi.updateFromTTDevice) et positionne `statusUnverified=true` sans
+   * émettre paramsChanged.lockedStatus. Seule une connexion BLE active confirme l'état
+   * réel (onConnected appelle searchBycicleStatusCommand quand statusUnverified est vrai).
+   *
+   * Ce chemin est volontairement découplé de _handleNewEventsUpdate/oplog_cooldown : il ne
+   * lit pas le journal d'opérations, seulement l'état verrouillé/déverrouillé, avec son
+   * propre cooldown plus court (`status_check_cooldown`, défaut 15 s) que celui de l'oplog
+   * complet (`oplog_cooldown`, défaut 60 s). Le détail de l'opération (last_operation/
+   * last_access) continue d'arriver via le cycle oplog normal.
+   * @param {import('ttlock-sdk-js').TTLock} lock
+   */
+  async _handleStatusUnverified(lock) {
+    if (!lock.statusUnverified) return;
+    const STATUS_CHECK_COOLDOWN_MS = (parseInt(process.env.STATUS_CHECK_COOLDOWN, 10) || 15) * 1000;
+    if (lock._lastStatusCheckFetch && Date.now() - lock._lastStatusCheckFetch < STATUS_CHECK_COOLDOWN_MS) {
+      return;
+    }
+    // Si une connexion est déjà en cours (ex. _handleNewEventsUpdate), la laisser résoudre
+    // statusUnverified elle-même — onConnected() le fait pour toute connexion, quelle que
+    // soit son origine.
+    if (lock.isConnected() || lock._processingOperationLog || this.waitingForConnect.has(lock.getAddress())) {
+      return;
+    }
+    const release = await this._acquireMutex(lock.getAddress());
+    let weConnected = false;
+    try {
+      // Peut avoir été résolu par une connexion concurrente pendant l'attente du mutex.
+      if (!lock.statusUnverified) return;
+      const result = await withTimeout(lock.connect(true), 15000, 'statusCheckConnect ' + lock.getAddress()).catch((e) => {
+        console.warn('_handleStatusUnverified connect timed out:', e.message);
+        return false;
+      });
+      if (!result || !lock.isConnected()) return;
+      weConnected = true;
+      // onConnected() du SDK a déjà exécuté searchBycicleStatusCommand() et remis
+      // statusUnverified à false — pas de requête supplémentaire à faire ici.
+      lock._lastStatusCheckFetch = Date.now();
+      this.emit('lockStateUpdated', lock);
+    } catch (error) {
+      console.error('_handleStatusUnverified connect error:', error.message);
+    } finally {
+      if (lock.isConnected()) {
+        await lock.disconnect().catch(() => {});
+      }
+      release();
+      if (weConnected && !this.scanning && this._bleMutex.size === 0 && this.waitingForConnect.size === 0) {
+        this.client.startMonitor();
+      }
+    }
+  }
+
+  /**
    *
    * @param {import('ttlock-sdk-js').TTLock} lock
    */
@@ -2456,6 +2511,15 @@ class Manager extends EventEmitter {
     // Connect/disconnect for the newEvents branch is handled inside _handleNewEventsUpdate.
     if (paramsChanged.newEvents === true && lock.hasNewEvents()) {
       await this._handleNewEventsUpdate(lock);
+    }
+    // Si _handleNewEventsUpdate ci-dessus vient de se connecter (cooldown oplog expiré),
+    // statusUnverified est déjà résolu à ce stade — appel sans effet. Sinon (cooldown
+    // oplog encore actif mais état incertain, ex. verrouillage par capteur de porte),
+    // ce chemin dédié confirme l'état bien plus vite, via son propre cooldown court.
+    if (lock.statusUnverified) {
+      this._handleStatusUnverified(lock).catch((e) =>
+        console.error('_handleStatusUnverified error:', e.message)
+      );
     }
   }
 

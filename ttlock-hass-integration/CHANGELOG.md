@@ -1,6 +1,23 @@
 # Changelog
 
 
+## [2.7.4] — 2026-08-29
+
+### 🐛 Fixed · ✨ Added
+
+- **Slow state update for door-sensor-triggered locks**: the `lock` entity
+  could take up to `oplog_cooldown` (60 s by default) to reflect a
+  verrouillage détecté par le capteur de porte, because the only path that
+  could confirm a re-lock was the full operation-log read, throttled to
+  protect the lock's battery. `manager.js` adds a new, decoupled
+  `_handleStatusUnverified` path: when the BLE advertisement can no longer
+  vouch for the locked/unlocked state (`lock.statusUnverified`), a short BLE
+  connection confirms the actual state without reading the operation log,
+  on its own shorter cooldown (`status_check_cooldown`, default 15 s). The
+  operation detail (who/what triggered it) still arrives on the normal
+  `oplog_cooldown` cadence.
+
+
 ## [2.7.3] — 2026-08-25
 
 ### 🎨 UI / UX
