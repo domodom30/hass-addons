@@ -3,6 +3,7 @@ import store from './store.js';
 import manager from './manager.js';
 import express from 'express';
 import api from '../api/index.js';
+import { detectLanguage } from './haLanguage.js';
 
 /**
  * Validate and normalise the noble-gateway options.
@@ -76,6 +77,7 @@ export default async function init(options = {}) {
     store.setDataPath(options.settingsPath);
   }
   await store.loadData();
+  await detectLanguage();
 
   // initialize manager
   if (options.gateway === 'noble') {

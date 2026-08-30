@@ -6,6 +6,7 @@ class Store {
   aliasData = { lock: {}, card: {}, finger: {} };
   /** @type {Object.<string, {firmwareRevision?: string, modelNum?: string, hardwareRevision?: string, factoryDate?: string}>} */
   deviceInfoData = {};
+  language = 'en';
 
   setDataPath(path) {
     this.settingsPath = path;
@@ -13,6 +14,14 @@ class Store {
 
   getDataPath() {
     return this.settingsPath;
+  }
+
+  setLanguage(lang) {
+    this.language = lang;
+  }
+
+  getLanguage() {
+    return this.language;
   }
 
   /**

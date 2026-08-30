@@ -1,6 +1,23 @@
 # Changelog
 
 
+## [2.7.5] — 2026-08-30
+
+### 🐛 Fixed
+
+- **MQTT operation labels not translated when Home Assistant is in French**:
+  the `Last operation` sensor and the `Operation` event entity's attributes
+  showed raw English text (e.g. "Door sensor lock") regardless of HA's UI
+  language, because these values come from MQTT discovery payloads, which HA
+  never auto-translates. The addon now detects HA's configured language at
+  startup via the Supervisor Core API and localizes the operation label
+  (French translations for all ~40 operation codes) before publishing —
+  falling back to English if detection fails or the language isn't
+  supported. The `event` entity's underlying `event_type` (`lock`/`unlock`)
+  is left untranslated on purpose, so existing automations matching on it
+  keep working.
+
+
 ## [2.7.4] — 2026-08-29
 
 ### 🐛 Fixed · ✨ Added

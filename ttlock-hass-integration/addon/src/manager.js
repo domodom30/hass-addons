@@ -4,6 +4,7 @@ import store from './store.js';
 import { readOperationLogIncremental, selectNewOperations } from './oplog.js';
 import { latestOperation } from './mqttTopics.js';
 import { shouldForceMonitorRecovery, MONITOR_SILENCE_MS } from './monitorHealth.js';
+import { getRecordTypeName } from './logOperateNames.js';
 import { TTLockClient, AudioManage, LockedStatus, LogOperateCategory, LogOperateNames } from '@domodom30/ttlock-sdk-js';
 
 const ScanType = Object.freeze({
@@ -1365,7 +1366,7 @@ class Manager extends EventEmitter {
   }
 
   _enrichOperation(operation) {
-    operation.recordTypeName = LogOperateNames[operation.recordType];
+    operation.recordTypeName = getRecordTypeName(operation.recordType, store.getLanguage(), LogOperateNames);
     if (LogOperateCategory.LOCK.includes(operation.recordType)) {
       operation.recordTypeCategory = 'LOCK';
     } else if (LogOperateCategory.UNLOCK.includes(operation.recordType)) {
