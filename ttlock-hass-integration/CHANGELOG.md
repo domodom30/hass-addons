@@ -1,6 +1,20 @@
 # Changelog
 
 
+## [2.7.6] — 2026-08-31
+
+### 🔧 Internal
+
+- **Removed duplicate operation-label translations**: the French and English
+  labels for TTLock operation codes (e.g. "Passcode unlock") were maintained
+  in two places — the addon's `logOperateNames.js` / SDK constants, and the
+  frontend's `en.json` / `fr.json` locale files — with a comment asking
+  future edits to keep both in sync manually. The addon already computes and
+  sends the correctly localized `recordTypeName` for every operation (used
+  as-is for MQTT), so the frontend now displays that value directly instead
+  of duplicating its own translation table. No visible behavior change.
+
+
 ## [2.7.5] — 2026-08-30
 
 ### 🐛 Fixed

@@ -264,9 +264,7 @@ export default {
             tag: this.$t(TAG_KEYS[kind]),
             time: m.isValid() ? m.format("DD-MM HH:mm:ss") : "—",
             lockName: op._lockName,
-            message: this.$te(`operations.logType.${op.recordType}`)
-              ? this.$t(`operations.logType.${op.recordType}`)
-              : (op.recordTypeName || "—"),
+            message: op.recordTypeName || "—",
             credential: credential.trim(),
           }
         })

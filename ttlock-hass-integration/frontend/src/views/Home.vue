@@ -181,9 +181,7 @@ export default {
       this.$store.commit("setOverlay", { overlay: "logs", address: null })
     },
     opLabel(op) {
-      return this.$te(`operations.logType.${op.recordType}`)
-        ? this.$t(`operations.logType.${op.recordType}`)
-        : (op.recordTypeName || '—')
+      return op.recordTypeName || '—'
     },
     opIcon(op) {
       if (op.recordTypeCategory === 'LOCK')   return 'mdi-lock'
