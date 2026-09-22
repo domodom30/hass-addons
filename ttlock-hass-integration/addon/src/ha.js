@@ -371,7 +371,17 @@ class HomeAssistant {
     if (!this.connected) return;
     try {
       const id = lockIdFromAddress(lock.getAddress());
-      const lockedStatus = await lock.getLockStatus();
+      let lockedStatus;
+      try {
+        lockedStatus = await lock.getLockStatus();
+      } catch (error) {
+        // Une re-lecture BLE live peut échouer (non connectée, ou commande déjà en cours —
+        // collision avec une lecture du journal d'opérations sur la même connexion). On
+        // retombe sur la valeur en cache du SDK plutôt que d'abandonner toute la publication :
+        // sans ce filet, un échec de requête laissait l'entité HA bloquée sur son dernier état.
+        console.warn('updateLockState: getLockStatus a échoué, utilisation du cache:', error.message);
+        lockedStatus = lock.lockedStatus;
+      }
       const statePayload = {
         battery: lock.getBattery(),
         rssi: lock.getRssi()

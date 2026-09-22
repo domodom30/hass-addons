@@ -2659,16 +2659,16 @@ class Manager extends EventEmitter {
           lastStatus = LockedStatus.LOCKED;
         }
       }
-      if (lastStatus === LockedStatus.UNLOCKED) this.emit('lockUnlock', lock);
-      else if (lastStatus === LockedStatus.LOCKED) this.emit('lockLock', lock);
+      // Résoudre l'état AVANT d'émettre lockLock/lockUnlock : ha.js republie l'état sur ces
+      // évènements via lock.getLockStatus(), qui déclenche sa propre commande BLE tant que
+      // statusUnverified est vrai. Émettre avant cet await faisait courir les deux requêtes
+      // en concurrence sur la même connexion ("Command already in progress"), et l'entité HA
+      // restait bloquée sur son dernier état connu — typiquement après une fermeture
+      // déclenchée par le capteur de porte, où seule cette requête live confirme l'état.
       const status = await lock.getLockStatus();
-      if (lastStatus != LockedStatus.UNKNOWN && status != lastStatus) {
-        if (status == LockedStatus.LOCKED) {
-          this.emit('lockLock', lock);
-        } else if (status == LockedStatus.UNLOCKED) {
-          this.emit('lockUnlock', lock);
-        }
-      }
+      const finalStatus = status != LockedStatus.UNKNOWN ? status : lastStatus;
+      if (finalStatus === LockedStatus.UNLOCKED) this.emit('lockUnlock', lock);
+      else if (finalStatus === LockedStatus.LOCKED) this.emit('lockLock', lock);
       return true;
     } catch (error) {
       console.error('_processOperationLog error:', error.message);

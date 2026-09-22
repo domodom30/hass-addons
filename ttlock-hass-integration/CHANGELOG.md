@@ -1,6 +1,26 @@
 # Changelog
 
 
+## [2.7.7] — 2026-09-22
+
+### 🐛 Fixed
+
+- **Lock entity stuck on "unlocked" after a door-sensor-triggered relock**:
+  the status-confirmation path added in 2.7.4 (`_handleStatusUnverified`)
+  and the operation-log handler could each fire their own live
+  `getLockStatus()` BLE query on the same connection around the same time;
+  one of the two then failed with `Command already in progress`, and the
+  failure was silently dropped, so the `lock` entity in HA never received
+  the corrected state — it stayed on its last known reading. The
+  operation-log handler (`_processOperationLog`) now waits for its own
+  `getLockStatus()` call to resolve before emitting `lockLock`/`lockUnlock`,
+  instead of emitting first and querying afterward, which removes the race
+  at its source. `updateLockState` also now falls back to the SDK's cached
+  status instead of dropping the MQTT publish entirely when a live query
+  still fails (e.g. a genuine disconnect), so battery/rssi keep being
+  published even then.
+
+
 ## [2.7.6] — 2026-08-31
 
 ### 🔧 Internal
