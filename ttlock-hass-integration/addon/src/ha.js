@@ -391,22 +391,22 @@ class HomeAssistant {
     if (!this.connected) return;
     try {
       const id = lockIdFromAddress(lock.getAddress());
-      let lockedStatus;
-      try {
-        lockedStatus = await lock.getLockStatus();
-      } catch (error) {
-        // Une re-lecture BLE live peut échouer (non connectée, ou commande déjà en cours —
-        // collision avec une lecture du journal d'opérations sur la même connexion). On
-        // retombe sur la valeur en cache du SDK plutôt que d'abandonner toute la publication :
-        // sans ce filet, un échec de requête laissait l'entité HA bloquée sur son dernier état.
-        console.warn('updateLockState: getLockStatus a échoué, utilisation du cache:', error.message);
-        lockedStatus = lock.lockedStatus;
-      }
+      // Champ en cache, jamais getLockStatus() : cet accesseur lance une vraie commande BLE
+      // tant que statusUnverified est vrai, et ce handler n'est pas attendu par le manager.
+      // Émis depuis 'lockConnected' pendant un connect(true) (skipDataRead → statusUnverified
+      // reste vrai), il entrait en collision avec la lecture du journal d'opérations sur la
+      // même session GATT (« Command already in progress » / « Unprocessed responses »).
+      // Rien n'est perdu : le manager confirme l'état (getLockStatus(true), awaité) avant
+      // chaque lockLock/lockUnlock/lockStateUpdated — même raisonnement que api/Lock.js.
+      const lockedStatus = lock.lockedStatus;
       const statePayload = {
         battery: lock.getBattery(),
         rssi: lock.getRssi()
       };
-      if (lockedStatus != LockedStatus.UNKNOWN) {
+      // statusUnverified : le cache vient du bit isUnlock de l'advertisement, non probant
+      // (ex. refermeture par le capteur de porte). On ne publie pas un état potentiellement
+      // périmé — l'état confirmé arrivera par l'évènement émis après la vérification.
+      if (lockedStatus != LockedStatus.UNKNOWN && !lock.statusUnverified) {
         statePayload.state = lockedStatus == LockedStatus.LOCKED ? 'LOCK' : 'UNLOCK';
       }
       await this._publish(stateTopic(id), statePayload, { retain: true, qos: 1 });

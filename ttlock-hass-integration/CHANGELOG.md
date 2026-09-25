@@ -1,6 +1,22 @@
 # Changelog
 
 
+## [2.8.1] — 2026-09-25
+
+### 🐛 Fixed
+
+- **`Error getting lock status: Command already in progress` on every
+  door cycle**: `connect(true)` from the `newEvents` path emits `connected`,
+  and `ha._onLockConnected` → `updateLockState` called `getLockStatus()`,
+  which fires a real BLE command while `statusUnverified` is set. Nobody
+  awaited it, so it ran concurrently with `_processOperationLog` on the same
+  GATT session (and sometimes left an orphan response behind, surfacing as
+  `Unprocessed responses` in the manager's own status read). `updateLockState`
+  now only reads the cached `lockedStatus` — like `api/Lock.js` — and omits
+  `state` while it is unverified; the manager already confirms the status
+  (awaited) before every `lockLock`/`lockUnlock`/`lockStateUpdated`.
+
+
 ## [2.8.0] — 2026-09-25
 
 ### 🐛 Fixed
