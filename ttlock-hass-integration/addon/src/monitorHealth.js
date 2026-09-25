@@ -22,8 +22,15 @@ export const MONITOR_SILENCE_MS = 3 * 60 * 1000;
 /**
  * Délai minimum entre deux reprises forcées : quand les serrures sont réellement hors de
  * portée, le silence est légitime et se prolonge indéfiniment.
+ *
+ * 90 s et non 5 min : le cooldown protège du cas « silence légitime », mais il s'appliquait
+ * aussi au cas « la reprise n'a rien réparé ». Une reprise inefficace gelait alors l'état des
+ * serrures pendant 5 minutes de plus, sans que rien ne le signale — observé en production
+ * sous la forme de trous de plus de 15 minutes, dont seul un redémarrage de l'add-on sortait.
+ * L'escalade (cf. _verifyMonitorRecovery dans manager.js) traite la reprise inefficace ;
+ * ce délai n'a plus qu'à espacer les tentatives.
  */
-export const MONITOR_RECOVERY_COOLDOWN_MS = 5 * 60 * 1000;
+export const MONITOR_RECOVERY_COOLDOWN_MS = 90 * 1000;
 
 /**
  * @param {object} params

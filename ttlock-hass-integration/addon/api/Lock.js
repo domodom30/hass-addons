@@ -134,11 +134,12 @@ class Lock {
     lock.rssi = lockObject.getRssi();
     lock.battery = lockObject.getBattery();
 
-    try {
-      lock.locked = await lockObject.getLockStatus();
-    } catch {
-      // lock in pairing mode
-    }
+    // Cached field, never getLockStatus(): that accessor fires a real BLE command whenever
+    // statusUnverified is set (i.e. right after a door-sensor relock — exactly when this
+    // broadcast runs), which collided with the manager's own status read on the same GATT
+    // session ("Command already in progress"). Nothing is lost: fromTTLock runs downstream
+    // of the events that already refreshed the status.
+    lock.locked = lockObject.lockedStatus;
 
     // STRICTLY non-BLE from here on: this method runs on every status broadcast and must
     // NEVER touch the BLE bus, otherwise it races with user ops (=> "Command already in progress").

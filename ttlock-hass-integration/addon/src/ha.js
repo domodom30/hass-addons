@@ -14,6 +14,8 @@ import {
   lockAvailabilityTopic,
   lastOperationTopic,
   lastUnlockTopic,
+  doorSensorFaultTopic,
+  buildDoorSensorFaultPayload,
   operationEventTopic,
   discoveryConfigTopic,
   REMOVED_DISCOVERY_OBJECT_IDS,
@@ -291,6 +293,24 @@ class HomeAssistant {
         }
       },
       {
+        component: 'sensor',
+        objectId: 'door_sensor_fault',
+        payload: {
+          unique_id: 'ttlock_' + id + '_door_sensor_fault',
+          name: name + ' Door sensor faults',
+          device: device,
+          entity_category: 'diagnostic',
+          state_class: 'measurement',
+          icon: 'mdi:door-open',
+          state_topic: doorSensorFaultTopic(id),
+          value_template: '{{ value_json.count }}',
+          json_attributes_topic: doorSensorFaultTopic(id),
+          qos: 1,
+          ...avail,
+          ...origin
+        }
+      },
+      {
         component: 'event',
         objectId: 'operation',
         payload: {
@@ -494,6 +514,27 @@ class HomeAssistant {
   }
 
   /**
+   * Publish the door-sensor fault diagnostic (count over the persisted log window).
+   * Reads the persisted log only — no BLE.
+   * @param {import('ttlock-sdk-js').TTLock} lock
+   */
+  async publishDoorSensorFaults(lock) {
+    if (!this.connected) return;
+    try {
+      const address = lock.getAddress();
+      const id = lockIdFromAddress(address);
+      const payload = buildDoorSensorFaultPayload(manager.getPersistedOperationLog(address));
+      // Pas de déduplication par recordNumber ici, contrairement à publishLastOperation :
+      // `count` bouge aussi quand le journal circulaire fait sortir une ancienne anomalie
+      // par le bas, sans qu'aucun nouveau record n'apparaisse. Publication retained à chaque
+      // rafraîchissement — charge négligeable, et le broker écrase la valeur précédente.
+      await this._publish(doorSensorFaultTopic(id), payload, { retain: true, qos: 1 });
+    } catch (error) {
+      console.error('MQTT publishDoorSensorFaults error:', error.message);
+    }
+  }
+
+  /**
    * Publish availability + state + last operation for a lock.
    * @param {import('ttlock-sdk-js').TTLock} lock
    */
@@ -502,6 +543,7 @@ class HomeAssistant {
     await this.updateLockState(lock);
     await this.publishLastOperation(lock);
     await this.publishLastUnlock(lock);
+    await this.publishDoorSensorFaults(lock);
   }
 
   /**
@@ -572,6 +614,7 @@ class HomeAssistant {
         discoveryConfigTopic(this.discovery_prefix, 'sensor', id, 'rssi'),
         discoveryConfigTopic(this.discovery_prefix, 'sensor', id, 'last_operation'),
         discoveryConfigTopic(this.discovery_prefix, 'sensor', id, 'last_access'),
+        discoveryConfigTopic(this.discovery_prefix, 'sensor', id, 'door_sensor_fault'),
         discoveryConfigTopic(this.discovery_prefix, 'event', id, 'operation'),
         discoveryConfigTopic(this.discovery_prefix, 'binary_sensor', id, 'connectivity'),
         // Entités retirées en 2.6.7 : toujours purgées au dépairage pour nettoyer les
@@ -587,7 +630,7 @@ class HomeAssistant {
       }
       // Purge retained data topics so a re-pair starts clean. (operationEventTopic is
       // published non-retained, so nothing lingers there — no need to purge it.)
-      for (const topic of [stateTopic(id), lockAvailabilityTopic(id), lastOperationTopic(id), lastUnlockTopic(id)]) {
+      for (const topic of [stateTopic(id), lockAvailabilityTopic(id), lastOperationTopic(id), lastUnlockTopic(id), doorSensorFaultTopic(id)]) {
         await this._publish(topic, '', { retain: true, qos: 1 });
       }
       this.configuredLocks.delete(lock.getAddress());

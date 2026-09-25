@@ -450,8 +450,86 @@ class Manager extends EventEmitter {
         `[Gateway] Monitor déclaré actif mais aucune publicité BLE depuis plus de ` +
         `${Math.round(MONITOR_SILENCE_MS / 1000)}s — reprise forcée du scan.`
       );
+      this._verifyMonitorRecovery();
     }
     return stale;
+  }
+
+  /** Fenêtre laissée à une reprise forcée pour produire une publicité BLE. */
+  static get RECOVERY_VERIFY_MS() { return 30 * 1000; }
+
+  /**
+   * Vérifier qu'une reprise forcée a réellement ramené du trafic BLE, et escalader sinon.
+   *
+   * `_ensureMonitoring` conclut au succès dès que `isMonitoring()` repasse à true — or c'est
+   * précisément le drapeau dont `monitorHealth` explique qu'il ment quand le transport est
+   * mort. La reprise se déclarait donc réussie (`Reconnecté — monitor BLE actif: true`) sans
+   * qu'aucune publicité ne revienne, et plus rien ne retentait avant l'expiration du cooldown.
+   *
+   * Seule preuve admissible, ici comme dans monitorHealth : la réception effective d'une
+   * publicité. À défaut, on remonte d'un cran — réouverture du websocket de la passerelle,
+   * qui reconstruit la pile côté SDK, là où un cycle stop/start de plus ne ferait que
+   * retomber sur le même état interne périmé.
+   */
+  _verifyMonitorRecovery() {
+    if (this._recoveryVerifyTimer) clearTimeout(this._recoveryVerifyTimer);
+    const before = this._mostRecentLastSeen();
+    const startedAt = Date.now();
+    this._recoveryVerifyTimer = setTimeout(() => {
+      this._recoveryVerifyTimer = undefined;
+      const after = this._mostRecentLastSeen();
+      if (after > before) {
+        console.log(
+          `[Gateway] Reprise forcée confirmée — publicité BLE reçue après ` +
+          `${Math.round((after - startedAt) / 1000)}s.`
+        );
+        return;
+      }
+      console.warn(
+        `[Gateway] Toujours aucune publicité BLE ${Math.round(Manager.RECOVERY_VERIFY_MS / 1000)}s ` +
+        `après la reprise forcée — escalade: réouverture du lien passerelle.`
+      );
+      this._escalateMonitorRecovery();
+    }, Manager.RECOVERY_VERIFY_MS);
+    if (typeof this._recoveryVerifyTimer.unref === 'function') {
+      this._recoveryVerifyTimer.unref();
+    }
+  }
+
+  /** Horodatage du contact BLE le plus récent, toutes serrures confondues (0 si aucun). */
+  _mostRecentLastSeen() {
+    let mostRecent = 0;
+    for (const timestamp of this._lastSeen.values()) {
+      if (typeof timestamp === 'number' && timestamp > mostRecent) mostRecent = timestamp;
+    }
+    return mostRecent;
+  }
+
+  /**
+   * Forcer la reconstruction du lien passerelle après une reprise inefficace.
+   *
+   * `reconnect()` de reconnecting-websocket ferme le socket courant et en rouvre un ; le
+   * handler 'open' déjà en place (cf. _attachGatewayWatchdog) rejoue alors
+   * _scheduleGatewayRecovery, donc le monitor est ré-armé sur une pile neuve. Sans effet en
+   * BLE local (pas de passerelle) : le cycle stop/start forcé du watchdog reste le seul levier.
+   */
+  _escalateMonitorRecovery() {
+    if (this.gateway !== 'noble') {
+      this._ensureMonitoring(true);
+      return;
+    }
+    const ws = this.client?.bleService?.scanner?.noble?._bindings?.ws;
+    if (!ws || typeof ws.reconnect !== 'function') {
+      console.warn('[Gateway] Escalade impossible (socket SDK inaccessible) — nouvelle reprise au prochain cycle.');
+      this._ensureMonitoring(true);
+      return;
+    }
+    try {
+      ws.reconnect();
+    } catch (error) {
+      console.warn('[Gateway] Échec de la réouverture du lien passerelle:', error.message);
+      this._ensureMonitoring(true);
+    }
   }
 
   /**
@@ -2093,7 +2171,20 @@ class Manager extends EventEmitter {
     // like _attachGatewayWatchdog; feature-detected so an SDK shape change degrades to
     // "no heartbeat" (offline watchdog stays inert for this lock) instead of a crash.
     if (lock.device && typeof lock.device.on === 'function') {
-      lock.device.on('updated', () => this._touchLastSeen(lock));
+      lock.device.on('updated', () => {
+        this._touchLastSeen(lock);
+        // Seul point d'entrée de la confirmation d'état. Le 'updated' de TTLock ne se
+        // déclenche que sur un changement batterie/newEvents/lockedStatus ; or une
+        // refermeture ne change AUCUN des trois (le bit isUnlock qui retombe ne prouve
+        // rien, cf. TTLockApi.updateFromTTDevice) — elle lève seulement statusUnverified,
+        // en silence. Branché ici, sur la publicité brute, l'état est confirmé dès la
+        // pub suivante au lieu d'attendre qu'un cycle oplog (60 s à 3 min) passe par là.
+        if (lock.statusUnverified) {
+          this._handleStatusUnverified(lock).catch((e) =>
+            console.error('_handleStatusUnverified error:', e.message)
+          );
+        }
+      });
     }
     this._touchLastSeen(lock);
   }
@@ -2450,7 +2541,13 @@ class Manager extends EventEmitter {
    */
   async _handleStatusUnverified(lock) {
     if (!lock.statusUnverified) return;
-    const STATUS_CHECK_COOLDOWN_MS = (parseInt(process.env.STATUS_CHECK_COOLDOWN, 10) || 15) * 1000;
+    // Garde de ré-entrance. Ce chemin part désormais de CHAQUE publicité (une toutes les
+    // quelques secondes), alors qu'un cycle complet connexion + lecture + déconnexion dure
+    // plus longtemps que ça. Sans ce drapeau, les publicités reçues pendant le cycle
+    // passaient toutes les gardes ci-dessous (le cooldown n'est horodaté qu'à la fin) et
+    // s'empilaient sur _acquireMutex, pour n'être écartées qu'après l'avoir obtenu.
+    if (lock._statusCheckInFlight) return;
+    const STATUS_CHECK_COOLDOWN_MS = (parseInt(process.env.STATUS_CHECK_COOLDOWN, 10) || 10) * 1000;
     if (lock._lastStatusCheckFetch && Date.now() - lock._lastStatusCheckFetch < STATUS_CHECK_COOLDOWN_MS) {
       return;
     }
@@ -2460,6 +2557,7 @@ class Manager extends EventEmitter {
     if (lock.isConnected() || lock._processingOperationLog || this.waitingForConnect.has(lock.getAddress())) {
       return;
     }
+    lock._statusCheckInFlight = true;
     const release = await this._acquireMutex(lock.getAddress());
     let weConnected = false;
     try {
@@ -2471,13 +2569,31 @@ class Manager extends EventEmitter {
       });
       if (!result || !lock.isConnected()) return;
       weConnected = true;
-      // onConnected() du SDK a déjà exécuté searchBycicleStatusCommand() et remis
-      // statusUnverified à false — pas de requête supplémentaire à faire ici.
+      // connect(true) pose skipDataRead, et onConnected() teste `!this.skipDataRead` avant
+      // de lancer searchBycicleStatusCommand : la branche de confirmation est sautée, et
+      // lockedStatus est réaffecté depuis le bit d'advertisement — celui-là même dont on
+      // sait qu'il ne prouve rien. statusUnverified reste donc vrai à ce stade.
+      //
+      // D'où cette lecture live explicite, et surtout AWAITED : sans elle, la confirmation
+      // se produisait dans le handler de 'lockStateUpdated' (ha.updateLockState →
+      // getLockStatus), c'est-à-dire en concurrence avec le `await lock.disconnect()` du
+      // finally ci-dessous — « Command already in progress », puis repli sur le cache
+      // périmé, donc publication d'un UNLOCK alors que la serrure venait de se reverrouiller.
+      //
+      // Horodaté AVANT la lecture : le cooldown doit courir depuis la tentative, pas depuis
+      // son succès. Stampé après, un échec (serrure qui se déconnecte en cours de requête)
+      // laissait le compteur vide et la publicité suivante relançait aussitôt un cycle
+      // complet — donc une reconnexion toutes les quelques secondes sur une serrure déjà
+      // en difficulté, exactement ce que le cooldown existe pour empêcher.
       lock._lastStatusCheckFetch = Date.now();
+      await lock.getLockStatus(true);
+      // getLockStatus(true) a remis statusUnverified à false : le getLockStatus() de
+      // ha.updateLockState déclenché par cet émit lit désormais le cache frais, sans BLE.
       this.emit('lockStateUpdated', lock);
     } catch (error) {
-      console.error('_handleStatusUnverified connect error:', error.message);
+      console.error('_handleStatusUnverified error:', error.message);
     } finally {
+      lock._statusCheckInFlight = false;
       if (lock.isConnected()) {
         await lock.disconnect().catch(() => {});
       }
@@ -2513,15 +2629,11 @@ class Manager extends EventEmitter {
     if (paramsChanged.newEvents === true && lock.hasNewEvents()) {
       await this._handleNewEventsUpdate(lock);
     }
-    // Si _handleNewEventsUpdate ci-dessus vient de se connecter (cooldown oplog expiré),
-    // statusUnverified est déjà résolu à ce stade — appel sans effet. Sinon (cooldown
-    // oplog encore actif mais état incertain, ex. verrouillage par capteur de porte),
-    // ce chemin dédié confirme l'état bien plus vite, via son propre cooldown court.
-    if (lock.statusUnverified) {
-      this._handleStatusUnverified(lock).catch((e) =>
-        console.error('_handleStatusUnverified error:', e.message)
-      );
-    }
+    // Pas d'appel à _handleStatusUnverified ici : il est branché sur la publicité brute
+    // (lock.device 'updated', cf. _bindLockEvents). Le brancher aussi sur cet évènement-ci
+    // n'ajouterait rien — 'updated' de TTLock n'est émis qu'en réponse à une publicité,
+    // donc le chemin brut se déclenche de toute façon — et ferait deux appels concurrents
+    // pour la même pub, dont l'un serait rejeté par les gardes.
   }
 
   async _processOperationLog(lock) {
@@ -2665,7 +2777,20 @@ class Manager extends EventEmitter {
       // en concurrence sur la même connexion ("Command already in progress"), et l'entité HA
       // restait bloquée sur son dernier état connu — typiquement après une fermeture
       // déclenchée par le capteur de porte, où seule cette requête live confirme l'état.
-      const status = await lock.getLockStatus();
+      // Lecture forcée (noCache) : sans le drapeau, getLockStatus rend le cache dès que
+      // statusUnverified est faux — un cache qui peut dater du début de la session, soit
+      // jusqu'à 45 s plus tôt (OPLOG_READ_TIMEOUT_MS). Une entrée « Porte fermée » lue à
+      // l'instant se faisait alors écraser par un UNLOCK antérieur. En repli, le journal
+      // qu'on vient de lire est la meilleure source restante.
+      let status = LockedStatus.UNKNOWN;
+      try {
+        status = await lock.getLockStatus(true);
+      } catch (error) {
+        console.warn(
+          `_processOperationLog [${lock.getAddress()}]: lecture live de l'état échouée, repli sur le journal:`,
+          error.message
+        );
+      }
       const finalStatus = status != LockedStatus.UNKNOWN ? status : lastStatus;
       if (finalStatus === LockedStatus.UNLOCKED) this.emit('lockUnlock', lock);
       else if (finalStatus === LockedStatus.LOCKED) this.emit('lockLock', lock);

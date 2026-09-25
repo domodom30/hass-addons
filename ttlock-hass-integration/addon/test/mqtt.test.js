@@ -22,7 +22,10 @@ import {
   buildOperationEventPayload,
   operationEventTopic,
   OPERATION_EVENT_TYPES,
-  isNewerOperation
+  isNewerOperation,
+  doorSensorFaultTopic,
+  buildDoorSensorFaultPayload,
+  DOOR_SENSOR_FAULT_RECORD_TYPE
 } from '../src/mqttTopics.js';
 
 // operateDateToIso emits a timezone-aware ISO using the process TZ (DST-aware).
@@ -259,4 +262,34 @@ test('le payload event est autoportant: event_type + attributs, sans value_templ
   ]);
   assert.equal(payload.by, 'Eddy');
   assert.equal(payload.record_number, 374);
+});
+
+
+test('doorSensorFaultTopic: topic diagnostic par serrure', () => {
+  assert.equal(doorSensorFaultTopic('e45be25f9cb8'), DATA_PREFIX + '/e45be25f9cb8/door_sensor_fault');
+});
+
+test('buildDoorSensorFaultPayload: compte les anomalies et retient la plus récente', () => {
+  const payload = buildDoorSensorFaultPayload([
+    { recordType: DOOR_SENSOR_FAULT_RECORD_TYPE, operateDate: 20260925102432, recordNumber: 1132 },
+    { recordType: 31, operateDate: 20260925102433, recordNumber: 1133 },
+    { recordType: 30, operateDate: 20260925102500, recordNumber: 1134 },
+    { recordType: DOOR_SENSOR_FAULT_RECORD_TYPE, operateDate: 20260925110854, recordNumber: 1159 }
+  ]);
+  assert.equal(payload.count, 2);
+  // window_size compte TOUTES les opérations, pas seulement les anomalies : sans lui un
+  // `count` brut ne dit pas sur quelle profondeur de journal il porte.
+  assert.equal(payload.window_size, 4);
+  assert.equal(payload.last_record_number, 1159);
+  assert.match(payload.last_fault, /^2026-09-25T11:08:54/);
+});
+
+test('buildDoorSensorFaultPayload: journal vide ou absent → compteur à zéro, pas de throw', () => {
+  for (const input of [[], undefined, null]) {
+    const payload = buildDoorSensorFaultPayload(input);
+    assert.equal(payload.count, 0);
+    assert.equal(payload.window_size, 0);
+    assert.equal(payload.last_fault, null);
+    assert.equal(payload.last_record_number, null);
+  }
 });

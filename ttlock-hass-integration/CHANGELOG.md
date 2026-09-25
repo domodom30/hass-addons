@@ -1,6 +1,63 @@
 # Changelog
 
 
+## [2.8.0] — 2026-09-25
+
+### 🐛 Fixed
+
+- **Lock entity never returning to "locked" after the door closes**: a
+  re-lock clears the advertisement's `isUnlock` bit, which the SDK
+  deliberately refuses to read as proof of a real re-lock — it only raises
+  `statusUnverified`, *without* emitting `updated`. The confirmation path
+  `_handleStatusUnverified` was reached solely from `_onLockUpdated`, i.e.
+  only on an `updated` event, so on a plain re-lock it was never called at
+  all. The state then had to wait for an unrelated battery/`newEvents`
+  change to ride along, i.e. the operation-log cadence (60 s, up to 3 min
+  under back-off) — and if BLE advertisements stopped, it never arrived and
+  only an addon restart fixed it. The check now runs off every raw BLE
+  advertisement, bounded by `status_check_cooldown`.
+- **Stale state published instead of the confirmed one**:
+  `_handleStatusUnverified` connected with `connect(true)`, which sets
+  `skipDataRead` — so `onConnected()` skipped `searchBycicleStatusCommand`
+  and left `statusUnverified` true, contrary to the comment there. The live
+  query therefore happened later, inside the `lockStateUpdated` handler,
+  racing the `finally` block's `disconnect()`: `Command already in
+  progress`, then a fallback that published the stale cached `UNLOCK`. The
+  confirming read is now explicit and awaited inside the connection.
+- **Operation log overridden by an older cached status**:
+  `_processOperationLog` resolved the final state with a cache-permitted
+  `getLockStatus()` that could predate the session by up to 45 s, letting a
+  stale `UNLOCK` overwrite a just-read "door closed" record. It now forces a
+  fresh read and falls back to the log only when that read fails.
+- **BLE bus touched from the UI broadcast path**: `Lock.fromTTLock` called
+  `getLockStatus()`, which issues a real BLE command whenever
+  `statusUnverified` is set — violating the contract stated in that same
+  function and colliding with the manager's own read. It now uses the cached
+  field.
+- **Multi-minute blackouts requiring an addon restart**: a forced monitor
+  recovery reported success as soon as `isMonitoring()` returned true — the
+  very flag `monitorHealth` exists to distrust — and nothing retried before
+  the 5-minute cooldown expired. Recovery is now verified 30 s later against
+  actual advertisement traffic and escalates to reopening the gateway
+  websocket when none arrived; the cooldown drops to 90 s.
+
+### ✨ Added
+
+- **Door sensor fault diagnostic sensor**: operation type 46 ("door sensor
+  anomaly") is counted over the persisted log window and exposed as a
+  diagnostic entity with the last occurrence as an attribute. The lock's
+  door sensor drives the close-triggered re-lock, so its faults explain
+  re-locks the lock itself never records — previously invisible, and easily
+  misread as an integration bug.
+- The UI websocket now listens to `lockStateUpdated`, so the frontend no
+  longer lags behind MQTT on the fast state path.
+
+### 🔧 Changed
+
+- `status_check_cooldown` default lowered 15 s → 10 s. It is now the single
+  knob governing how fast a re-lock reaches Home Assistant.
+
+
 ## [2.7.7] — 2026-09-22
 
 ### 🐛 Fixed

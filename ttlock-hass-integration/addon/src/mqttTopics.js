@@ -77,6 +77,11 @@ export function lastUnlockTopic(id) {
   return DATA_PREFIX + '/' + id + '/last_unlock';
 }
 
+/** Topic carrying the JSON payload of the door-sensor fault diagnostic sensor. */
+export function doorSensorFaultTopic(id) {
+  return DATA_PREFIX + '/' + id + '/door_sensor_fault';
+}
+
 /**
  * Home Assistant MQTT discovery config topic.
  * @param {string} prefix discovery prefix (e.g. "homeassistant")
@@ -253,6 +258,32 @@ export function buildLastOperationPayload(op) {
     // battery. Named distinctly so it is never confused with the live battery sensor
     // (which reads the state topic).
     battery_at_event: op.electricQuantity ?? null
+  };
+}
+
+/** recordType du journal signalant une anomalie du capteur de porte. */
+export const DOOR_SENSOR_FAULT_RECORD_TYPE = 46;
+
+/**
+ * Résumé diagnostique des anomalies du capteur de porte présentes dans le journal.
+ *
+ * Purement descriptif : le capteur est interne à la serrure, rien côté add-on ne peut le
+ * corriger. Mais c'est lui qui commande le verrouillage à la fermeture, donc ses anomalies
+ * expliquent les refermetures que la serrure elle-même n'enregistre pas — sans cette
+ * remontée, le défaut matériel reste invisible et se lit à tort comme un bug d'intégration.
+ *
+ * Fenêtre = le journal persisté (borné par l'option `max_oplog`), d'où `window_size` : un
+ * compte brut serait ininterprétable sans savoir sur combien d'opérations il porte.
+ * @param {Array<{recordType?: number, operateDate?: number, recordNumber?: number}>} operations
+ */
+export function buildDoorSensorFaultPayload(operations) {
+  const faults = (operations || []).filter((op) => op.recordType === DOOR_SENSOR_FAULT_RECORD_TYPE);
+  const last = latestOperation(faults);
+  return {
+    count: faults.length,
+    window_size: (operations || []).length,
+    last_fault: last ? operateDateToIso(last.operateDate) : null,
+    last_record_number: last?.recordNumber ?? null
   };
 }
 

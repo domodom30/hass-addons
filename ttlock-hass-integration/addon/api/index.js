@@ -444,6 +444,9 @@ export default async function initApi(server) {
   manager.on('lockLock', sendLockStatusUpdate);
   manager.on('lockUnlock', sendLockStatusUpdate);
   manager.on('lockUpdated', sendLockStatusUpdate);
+  // Fast state path (door-sensor relock): reaches MQTT via ha.js but had no UI listener,
+  // so the Vue frontend kept showing the pre-relock state until some other event fired.
+  manager.on('lockStateUpdated', sendLockStatusUpdate);
   manager.on('scanStart', sendStatusUpdate);
   manager.on('scanStop', sendStatusUpdate);
   manager.on('adapterReady', sendStatusUpdate);
