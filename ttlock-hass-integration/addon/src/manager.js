@@ -1735,6 +1735,7 @@ class Manager extends EventEmitter {
           }
         }
         console.log(`Connect attempt ${attempt}/4 failed (returned false)`);
+        this._resetGatewayConnectState(lock);
         return false;
       }
       console.log('Connected to', address);
@@ -1972,6 +1973,7 @@ class Manager extends EventEmitter {
           console.log('Successful connect attempt to paired lock', address);
         } else {
           console.log('Unsuccessful connect attempt to paired lock', address);
+          this._resetGatewayConnectState(lock);
           // lock stays in connectQueue for next retry
         }
       } finally {
@@ -2031,6 +2033,7 @@ class Manager extends EventEmitter {
         // _onLockUpdated will read operation log on next advertisement change
       } else {
         console.log('Unsuccessful connect attempt to paired lock', lock.getAddress());
+        this._resetGatewayConnectState(lock);
         // lock stays in connectQueue for retry on next scan
       }
     } finally {
@@ -2254,6 +2257,7 @@ class Manager extends EventEmitter {
           }
         } else {
           console.log('Retry connect failed for', address);
+          this._resetGatewayConnectState(lock);
           // If _onLockDisconnected fired during connect(false) it was blocked by the
           // dedup guard — reschedule explicitly so the lock eventually initializes.
           if (this.connectQueue.has(address)) {
@@ -2385,11 +2389,19 @@ class Manager extends EventEmitter {
       // freeze every user op (delete passcode, unlock, …) on _acquireMutex. The finally
       // block below force-disconnects on timeout, which clears the SDK's pending-command
       // state so the next connect doesn't trip "Command already in progress".
+      let timedOut = false;
       const result = await withTimeout(lock.connect(true), 15000, 'newEventsConnect ' + lock.getAddress()).catch((e) => {
+        timedOut = true;
         console.warn('_onLockUpdated connect timed out:', e.message);
         return false;
       });
       if (!result) {
+        if (!timedOut) {
+          // Sans ce log, un connect() qui échoue en silence (pas de réponse du gateway,
+          // connexion refusée…) n'apparaît que sous forme de « newEvents: échec #N ».
+          console.warn(`_onLockUpdated: connect(true) a échoué pour ${lock.getAddress()} (pas de connexion BLE établie)`);
+        }
+        this._resetGatewayConnectState(lock);
         this._scheduleNewEventsBackoff(lock); // connect failed — back off, don't spam
         return;
       }
@@ -2454,6 +2466,39 @@ class Manager extends EventEmitter {
         this.client.startMonitor();
       }
     }
+  }
+
+  /**
+   * Contournement pour le SDK ≤ 0.8.1 en mode gateway : NobleWebsocketBinding n'implémente
+   * pas cancelConnect(). Quand un connect n'obtient pas de réponse de l'ESP32 dans les 10 s,
+   * NobleDevice appelle peripheral.cancelConnect() → noble appelle bindings.cancelConnect()
+   * → TypeError avalé, et le drapeau `connecting` de la liaison reste à true. Tous les
+   * connect() suivants sont alors ignorés par la liaison (rien n'est envoyé au gateway) et
+   * échouent en silence au bout de 10 s — des heures d'« échec #N » jusqu'à ce que l'ESP32
+   * émette de lui-même un connect/disconnect pour cette serrure.
+   * On remet l'état de la liaison à zéro et on demande au gateway d'abandonner la tentative.
+   * Sans effet dès que le SDK fournit cancelConnect().
+   * @param {import('ttlock-sdk-js').TTLock} lock
+   * @returns {boolean} true si un état bloqué a été débloqué
+   */
+  _resetGatewayConnectState(lock) {
+    if (this.gateway !== 'noble') return false;
+    const bindings = this.client?.bleService?.scanner?.noble?._bindings;
+    if (!bindings || typeof bindings.cancelConnect === 'function') return false;
+    const uuid = lock?.device?.device?.peripheral?.id;
+    const peripheral = uuid ? bindings.peripherals?.get(uuid) : undefined;
+    if (!peripheral || peripheral.connected || (!peripheral.connecting && !peripheral.bufferedConnect)) {
+      return false;
+    }
+    peripheral.connecting = false;
+    peripheral.bufferedConnect = false;
+    try {
+      bindings.disconnect(uuid);
+    } catch (error) {
+      /* le websocket peut être fermé — l'état local est déjà remis à zéro */
+    }
+    console.warn(`[Gateway] État de connexion bloqué réinitialisé pour ${lock.getAddress()} (cancelConnect absent du SDK)`);
+    return true;
   }
 
   /**
@@ -2567,7 +2612,11 @@ class Manager extends EventEmitter {
         console.warn('_handleStatusUnverified connect timed out:', e.message);
         return false;
       });
-      if (!result || !lock.isConnected()) return;
+      if (!result) {
+        this._resetGatewayConnectState(lock);
+        return;
+      }
+      if (!lock.isConnected()) return;
       weConnected = true;
       // connect(true) pose skipDataRead, et onConnected() teste `!this.skipDataRead` avant
       // de lancer searchBycicleStatusCommand : la branche de confirmation est sautée, et

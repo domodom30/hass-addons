@@ -1,6 +1,29 @@
 # Changelog
 
 
+## [2.8.2] — 2026-09-27
+
+### 🐛 Fixed
+
+- **Gateway mode: hours of silent `newEvents: échec #N` (operation log never
+  read)**: when the ESP32 did not answer a BLE connect within 10 s, noble
+  called `cancelConnect()` on the websocket binding, which the SDK (≤ 0.8.1)
+  does not implement — the `TypeError` was swallowed and the binding's
+  `connecting` flag stayed `true`. Every later `connect()` was then dropped
+  without being sent to the gateway, until the ESP32 happened to report a
+  connect/disconnect on its own (~6 h streaks observed). The manager now
+  resets the stuck binding state and tells the gateway to abort after any
+  failed connect (no-op once the SDK provides `cancelConnect`).
+- A `connect(true)` that fails without timing out is now logged, instead of
+  only surfacing as `newEvents: échec #N`.
+
+### ⬆️ Dependencies
+
+- `@domodom30/ttlock-sdk-js` 0.8.1 → 0.8.2: the websocket binding now
+  implements `cancelConnect()`, which fixes the root cause. The manager-side
+  reset above stays as a safety net and is skipped when the SDK provides it.
+
+
 ## [2.8.1] — 2026-09-25
 
 ### 🐛 Fixed
