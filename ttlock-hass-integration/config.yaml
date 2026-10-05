@@ -1,5 +1,5 @@
 name: "TTLock"
-version: "2.8.5"
+version: "2.8.6"
 slug: ttlock-hass-integration
 description: "Integration of the offline TTLock SDK into Home Assistant"
 url: "https://github.com/domodom30/hass-addons"
@@ -52,7 +52,7 @@ schema:
   debug_communication: "bool?"
   debug_mqtt: "bool?"
   gateway_debug: "bool?"
-  oplog_cooldown: "int?"
-  status_check_cooldown: "int?"
-  lock_offline_timeout: "int?"
-  max_oplog: "int?"
+  oplog_cooldown: "int(5,)?"
+  status_check_cooldown: "int(2,)?"
+  lock_offline_timeout: "int(1,)?"
+  max_oplog: "int(1,)?"

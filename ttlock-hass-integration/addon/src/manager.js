@@ -26,13 +26,31 @@ async function sleep(ms) {
 }
 
 /**
+ * Option numérique d'environnement, avec défaut et plancher : `parseInt(...) || défaut`
+ * remplaçait 0 par le défaut mais laissait passer une valeur négative (cooldowns désactivés
+ * → tempête de reconnexions, timeout offline négatif → toutes les serrures offline).
+ * @param {string} name
+ * @param {number} fallback
+ * @param {number} min
+ */
+function envInt(name, fallback, min) {
+  const value = parseInt(process.env[name], 10);
+  return Number.isFinite(value) ? Math.max(value, min) : fallback;
+}
+
+/**
  * Wrap a promise with a timeout
  * @param {Promise} promise
  * @param {number} ms timeout in milliseconds
  * @param {string} label label for error message
  */
 function withTimeout(promise, ms, label) {
-  return Promise.race([promise, new Promise((_, reject) => setTimeout(() => reject(new Error('BLE timeout (' + label + ')')), ms))]);
+  let timer;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error('BLE timeout (' + label + ')')), ms);
+  });
+  // Timer toujours libéré : chaque commande en laissait un vivant 15 à 28 s.
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
 }
 /**
  * Events:
@@ -84,6 +102,23 @@ class Manager extends EventEmitter {
     this._pendingLock = new Map();
     /** @type {Map<string, Promise<any>>} In-flight unlockLock promises — coalesces duplicate concurrent requests */
     this._pendingUnlock = new Map();
+    /**
+     * @type {Map<string, 'LOCK'|'UNLOCK'>} Dernière intention demandée par serrure. Une
+     * commande (ou sa relance) qui ne correspond plus à cette intention est abandonnée : sans
+     * cela, UNLOCK → LOCK → UNLOCK pouvait finir verrouillé (le second UNLOCK fusionné avec le
+     * premier, le LOCK exécuté en dernier), ou une relance d'UNLOCK passer après un LOCK.
+     */
+    this._desiredState = new Map();
+    /**
+     * @type {number} Opérations utilisateur en attente de la radio. Les tâches de fond
+     * (lecture du journal, vérification d'état, connexion initiale) s'effacent quand il est
+     * non nul, au lieu de faire attendre un lock/unlock jusqu'à une minute derrière elles.
+     */
+    this._userOpsWaiting = 0;
+    /** @type {Map<string, NodeJS.Timeout>} timers de vérification après auto-verrouillage */
+    this._autoLockCheckTimers = new Map();
+    /** @type {number} epoch ms du dernier redémarrage automatique de l'ESP32 */
+    this._lastAutoEsp32RebootAt = 0;
     /** @type {'none'|'noble'} */
     this.gateway = 'none';
     this.gateway_host = '';
@@ -190,6 +225,7 @@ class Manager extends EventEmitter {
         if (this.gateway === 'noble') {
           this._attachGatewayWatchdog();
         }
+        this._startMonitorWatchdog();
         this._startLockOfflineWatchdog();
       } catch (error) {
         console.log(error);
@@ -382,11 +418,16 @@ class Manager extends EventEmitter {
     };
     ws.addEventListener('close', onDown);
     ws.addEventListener('error', onDown);
+  }
 
-    // Safety net: lock-op-driven monitor cycling (and the silent-false
-    // startMonitor() at _onScanStopped/_onLockDisconnected) can leave the
-    // monitor off even while the gateway is up. A periodic check re-arms it
-    // when the BLE path is idle, independently of the reconnect fast path.
+  /**
+   * Safety net: lock-op-driven monitor cycling (and the silent-false
+   * startMonitor() at _onScanStopped/_onLockDisconnected) can leave the
+   * monitor off even while the radio is available. A periodic check re-arms it
+   * when the BLE path is idle, independently of the gateway reconnect fast path.
+   * Actif dans tous les modes : en BLE local, rien ne relançait un monitor arrêté.
+   */
+  _startMonitorWatchdog() {
     if (!this._gatewayWatchdogInterval) {
       this._gatewayWatchdogInterval = setInterval(() => {
         this._ensureMonitoring(this._monitorLooksStale());
@@ -574,7 +615,7 @@ class Manager extends EventEmitter {
    * actives dans tous les cas — on ne coupe jamais une opération BLE en cours.
    */
   async _ensureMonitoring(force = false) {
-    if (this.gateway !== 'noble' || this.gatewayStatus !== 'connected') return;
+    if (this.gateway === 'noble' && this.gatewayStatus !== 'connected') return;
     if (this._ensuringMonitor) return;
     // BLE path busy — the active flow (scan / lock op / queued connect / newEvents background read)
     // restarts the monitor itself when it finishes.
@@ -582,7 +623,9 @@ class Manager extends EventEmitter {
     // getOperationLog(). startMonitor() here would trigger a Noble HCI scan-enable while a
     // BLE connection is open, which on many adapters interrupts the connection and causes
     // onDisconnected → adminAuth=false → _processOperationLog returns false → échec #1 loop.
-    if (this.scanning || this.waitingForConnect.size > 0 || this.connectQueue.size > 0 || this._bleMutex.size > 0) return;
+    // connectQueue n'est plus une garde : une serrure en attente de retry (back-off jusqu'à
+    // 5 min) laissait sinon le monitor arrêté pendant tout ce temps, pour toutes les serrures.
+    if (this.scanning || this.waitingForConnect.size > 0 || this._bleMutex.size > 0) return;
     if (!force && this.client?.isMonitoring?.()) return;
 
     this._ensuringMonitor = true;
@@ -700,129 +743,157 @@ class Manager extends EventEmitter {
     }
   }
 
-  async _tryUnlock(lock, address, attempt) {
-    try {
-      const res = await withTimeout(lock.unlock(), 15000, 'unlock ' + address);
-      console.log('Unlock result for', address, ':', res);
-      if (lock.isConnected()) await lock.disconnect().catch(() => {});
-      // The SDK swallows "Failed unlock response" (often a transient CRC corruption) and
-      // returns false. Treat that as a soft-failure so the parent loop reconnects and retries.
-      if (res === false) return { done: false };
-      return { done: true, res };
-    } catch (error) {
-      console.error(`Unlock attempt ${attempt}/3 error:`, error.message);
-      if (lock.isConnected()) await lock.disconnect().catch(() => {});
-      return { done: false };
-    }
-  }
-
   async unlockLock(address) {
-    if (this._pendingUnlock.has(address)) {
-      console.log('unlockLock already in progress for', address, '— reusing pending request');
-      return this._pendingUnlock.get(address);
-    }
-    const promise = this._doUnlockLock(address);
-    this._pendingUnlock.set(address, promise);
-    try {
-      return await promise;
-    } finally {
-      this._pendingUnlock.delete(address);
-    }
-  }
-
-  async _doUnlockLock(address) {
-    const lock = this.pairedLocks.get(address);
-    if (lock === undefined) {
-      console.log('Unlock: lock not in pairedLocks:', address);
-      return false;
-    }
-    try {
-      for (let attempt = 1; attempt <= 3; attempt++) {
-        console.log(`Attempting unlock (${attempt}/3):`, address);
-        if (!(await this._connectLock(lock))) {
-          console.log(`Unlock: connect failed on attempt ${attempt}/3 for`, address);
-          if (attempt < 3) {
-            console.log(`Waiting ${attempt * 1.5}s before retry...`);
-            await sleep(attempt * 1500);
-            continue;
-          }
-          return false;
-        }
-        const { done, res } = await this._tryUnlock(lock, address, attempt);
-        if (done) return res;
-        if (attempt < 3) {
-          this._releaseMutex(address);
-          console.log(`Waiting ${attempt * 1.5}s before retry...`);
-          await sleep(attempt * 1500);
-        }
-      }
-      console.log('All unlock attempts failed for', address);
-      return false;
-    } finally {
-      this._releaseConnect(address);
-    }
-  }
-
-  async _tryLock(lock, address, attempt) {
-    try {
-      const res = await withTimeout(lock.lock(), 15000, 'lock ' + address);
-      console.log('Lock result for', address, ':', res);
-      if (lock.isConnected()) await lock.disconnect().catch(() => {});
-      // The SDK swallows transient lock-command errors (CRC, bad response) and returns
-      // false. Treat that as a soft-failure so the parent loop reconnects and retries.
-      if (res === false) return { done: false };
-      return { done: true, res };
-    } catch (error) {
-      console.error(`Lock attempt ${attempt}/3 error:`, error.message);
-      if (lock.isConnected()) await lock.disconnect().catch(() => {});
-      return { done: false };
-    }
+    return this._requestLockState(address, 'UNLOCK');
   }
 
   async lockLock(address) {
-    if (this._pendingLock.has(address)) {
-      console.log('lockLock already in progress for', address, '— reusing pending request');
-      return this._pendingLock.get(address);
+    return this._requestLockState(address, 'LOCK');
+  }
+
+  /**
+   * Point d'entrée commun de lockLock/unlockLock.
+   *
+   * La dernière intention gagne (`_desiredState`) : une demande identique à une commande
+   * déjà en vol la rejoint, une demande opposée la rend obsolète — l'ancienne cesse ses
+   * relances et, si elle n'a pas encore obtenu la radio, ne s'exécute pas du tout.
+   * @param {string} address
+   * @param {'LOCK'|'UNLOCK'} target
+   */
+  async _requestLockState(address, target) {
+    this._desiredState.set(address, target);
+    const pending = target === 'LOCK' ? this._pendingLock : this._pendingUnlock;
+    if (pending.has(address)) {
+      console.log(`${target} already in progress for`, address, '— reusing pending request');
+      return pending.get(address);
     }
-    const promise = this._doLockLock(address);
-    this._pendingLock.set(address, promise);
+    const promise = this._doLockCommand(address, target);
+    pending.set(address, promise);
     try {
       return await promise;
     } finally {
-      this._pendingLock.delete(address);
+      pending.delete(address);
     }
   }
 
-  async _doLockLock(address) {
+  /**
+   * Exécute LOCK/UNLOCK avec une échéance globale et SANS relâcher la radio entre les
+   * tentatives (avant, une relance repassait en fin de file — derrière une commande opposée
+   * arrivée entre-temps, qu'elle venait alors défaire).
+   *
+   * Pas de login admin préalable : lock()/unlock() du SDK négocient leur propre challenge
+   * (getPsFromLock). Le checkAdmin+checkRandom imposé avant coûtait deux allers-retours BLE
+   * (jusqu'à ~25 s en cas de non-réponse) et ses échecs déclenchaient des reconnexions
+   * inutiles. La dernière tentative repasse par le chemin complet (connect(false) + login
+   * admin) en filet de sécurité pour les firmwares qui l'exigeraient.
+   * @param {string} address
+   * @param {'LOCK'|'UNLOCK'} target
+   */
+  async _doLockCommand(address, target) {
     const lock = this.pairedLocks.get(address);
     if (lock === undefined) {
-      console.log('Lock: lock not in pairedLocks:', address);
+      console.log(`${target}: lock not in pairedLocks:`, address);
       return false;
     }
+    const COMMAND_DEADLINE_MS = 45 * 1000;
+    const MAX_ATTEMPTS = 3;
+    const deadline = Date.now() + COMMAND_DEADLINE_MS;
+    const superseded = () => this._desiredState.get(address) !== target;
+    const startedAt = Date.now();
+    let holdingRadio = false;
     try {
-      for (let attempt = 1; attempt <= 3; attempt++) {
-        console.log(`Attempting lock (${attempt}/3):`, address);
-        if (!(await this._connectLock(lock))) {
-          console.log(`Lock: connect failed on attempt ${attempt}/3 for`, address);
-          if (attempt < 3) {
-            console.log(`Waiting ${attempt * 1.5}s before retry...`);
-            await sleep(attempt * 1500);
-            continue;
-          }
+      for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+        if (superseded()) {
+          console.log(`${target} pour ${address} abandonné : remplacé par une commande plus récente`);
           return false;
         }
-        const { done, res } = await this._tryLock(lock, address, attempt);
-        if (done) return res;
-        if (attempt < 3) {
-          this._releaseMutex(address);
-          console.log(`Waiting ${attempt * 1.5}s before retry...`);
-          await sleep(attempt * 1500);
+        if (Date.now() >= deadline) {
+          console.warn(`${target} pour ${address} abandonné : échéance de ${COMMAND_DEADLINE_MS / 1000}s dépassée`);
+          return false;
+        }
+        const fullConnect = attempt === MAX_ATTEMPTS;
+        console.log(`Attempting ${target} (${attempt}/${MAX_ATTEMPTS}):`, address);
+        const connected = await this._connectLock(lock, fullConnect, {
+          skipDataRead: !fullConnect,
+          radioHeld: holdingRadio,
+          keepRadio: true,
+          maxAttempts: 2,
+          deadline
+        });
+        holdingRadio = this._mutexReleases.has(address);
+        if (!connected) {
+          console.log(`${target}: connect failed on attempt ${attempt}/${MAX_ATTEMPTS} for`, address);
+          continue;
+        }
+        if (superseded()) {
+          console.log(`${target} pour ${address} abandonné : remplacé par une commande plus récente`);
+          return false;
+        }
+        const res = await this._tryLockCommand(lock, address, target, attempt);
+        if (res === true) {
+          console.log(`${target} OK pour ${address} en ${((Date.now() - startedAt) / 1000).toFixed(1)}s`);
+          if (target === 'UNLOCK') this._scheduleAutoLockCheck(lock);
+          else this._cancelAutoLockCheck(address);
+          return true;
         }
       }
-      console.log('All lock attempts failed for', address);
+      console.log(`All ${target} attempts failed for`, address);
       return false;
     } finally {
+      if (this._desiredState.get(address) === target) this._desiredState.delete(address);
       this._releaseConnect(address);
+    }
+  }
+
+  /**
+   * @returns {Promise<boolean>} true si la serrure a confirmé la commande
+   */
+  async _tryLockCommand(lock, address, target, attempt) {
+    try {
+      const op = target === 'LOCK' ? lock.lock() : lock.unlock();
+      const res = await withTimeout(op, 15000, target.toLowerCase() + ' ' + address);
+      console.log(`${target} result for`, address, ':', res);
+      // The SDK swallows transient command errors (CRC, bad response) and returns false:
+      // a soft failure, the caller reconnects and retries.
+      return res === true;
+    } catch (error) {
+      console.error(`${target} attempt ${attempt} error:`, error.message);
+      return false;
+    } finally {
+      if (lock.isConnected()) await lock.disconnect().catch(() => {});
+    }
+  }
+
+  /**
+   * Après un déverrouillage avec auto-verrouillage actif, le SDK ne signale jamais la
+   * refermeture : son timer est annulé par la déconnexion qui suit la commande. L'état HA
+   * restait donc « déverrouillé » jusqu'à ce que le bit d'advertisement retombe ET qu'un
+   * cycle de vérification passe. On programme une vérification juste après l'échéance.
+   * @param {import('ttlock-sdk-js').TTLock} lock
+   */
+  _scheduleAutoLockCheck(lock) {
+    const address = lock.getAddress();
+    this._cancelAutoLockCheck(address);
+    const autoLockTime = lock.autoLockTime;
+    if (typeof autoLockTime !== 'number' || autoLockTime <= 0) return;
+    const handle = setTimeout(() => {
+      this._autoLockCheckTimers.delete(address);
+      if (lock.lockedStatus !== LockedStatus.UNLOCKED) return;
+      lock.statusUnverified = true;
+      lock._lastStatusCheckFetch = 0; // passer outre le cooldown : vérification attendue
+      this._handleStatusUnverified(lock).catch((e) =>
+        console.error('_handleStatusUnverified (auto-lock) error:', e.message)
+      );
+    }, autoLockTime * 1000 + 3000);
+    if (typeof handle.unref === 'function') handle.unref();
+    this._autoLockCheckTimers.set(address, handle);
+  }
+
+  _cancelAutoLockCheck(address) {
+    const handle = this._autoLockCheckTimers.get(address);
+    if (handle) {
+      clearTimeout(handle);
+      this._autoLockCheckTimers.delete(address);
     }
   }
 
@@ -1714,9 +1785,9 @@ class Manager extends EventEmitter {
    * @param {number} attempt current attempt number (1–3)
    * @returns {Promise<true|'retry'|false>}
    */
-  async _connectAttempt(lock, address, needsAdmin, attempt) {
+  async _connectAttempt(lock, address, needsAdmin, attempt, skipDataRead = false, timeoutMs = 28000) {
     try {
-      console.log(`Connect attempt ${attempt}/4 to ${address}`);
+      console.log(`Connect attempt ${attempt}/4 to ${address}${skipDataRead ? ' (rapide)' : ''}`);
       // This wrapper timeout MUST stay larger than the SDK's own internal connect budget,
       // otherwise we abort a connection the SDK is still completing: on a weak link the
       // handshake finishes a moment later ('Connected to paired lock') and that late success
@@ -1725,7 +1796,7 @@ class Manager extends EventEmitter {
       // a fixed ~15s poll, so the typical case is much faster — but a weak link can still
       // consume the SDK's full internal budget, so this 28000ms guard stays as a deliberately
       // conservative worst-case margin (not tuned down as part of the SDK bump).
-      const res = await withTimeout(lock.connect(false), 28000, 'connect ' + address);
+      const res = await withTimeout(lock.connect(skipDataRead), timeoutMs, 'connect ' + address);
       if (!res) {
         if (lock.connecting) {
           let wait = 30;
@@ -1739,7 +1810,9 @@ class Manager extends EventEmitter {
         return false;
       }
       console.log('Connected to', address);
-      await sleep(300);
+      // Laisse passer un éventuel évènement de déconnexion en attente avant le login admin ;
+      // inutile (et coûteux) pour lock/unlock, qui n'en font pas.
+      if (needsAdmin) await sleep(300);
       if (!lock.isConnected()) {
         console.warn('Lock self-disconnected right after onConnected', address, '— retrying');
         return attempt < 4 ? 'retry' : false;
@@ -1767,8 +1840,24 @@ class Manager extends EventEmitter {
       console.error(`Connect attempt ${attempt}/4 error:`, error.message);
       // Reset so the next attempt doesn't skip macro_adminLogin on a stale session
       if (lock.adminAuth !== undefined) lock.adminAuth = false;
+      // Un timeout ici n'annule pas le connect() du SDK : sans ce nettoyage, la tentative
+      // suivante tombait sur « Connect already in progress » et une connexion tardive
+      // restait ouverte sans propriétaire.
+      await this._abandonConnect(lock);
       return false;
     }
+  }
+
+  /**
+   * Nettoyage après un connect() abandonné par un timeout côté add-on : attend (borné) que
+   * le SDK sorte de son état `connecting`, puis coupe toute session ouverte entre-temps.
+   * @param {import('ttlock-sdk-js').TTLock} lock
+   */
+  async _abandonConnect(lock) {
+    let wait = 50; // 5 s max — le SDK borne lui-même sa tentative
+    while (lock.connecting && wait-- > 0) await sleep(100);
+    if (lock.isConnected()) await lock.disconnect().catch(() => {});
+    this._resetGatewayConnectState(lock);
   }
 
   /**
@@ -1794,7 +1883,8 @@ class Manager extends EventEmitter {
    *   without admin auth — avoids an unnecessary checkAdminCommand that causes some lock
    *   firmware to disconnect immediately after the connect(false) handshake.
    */
-  async _connectLock(lock, needsAdmin = true) {
+  async _connectLock(lock, needsAdmin = true, opts = {}) {
+    const { skipDataRead = false, radioHeld = false, keepRadio = false, maxAttempts = 4, deadline = Infinity } = opts;
     const address = lock.getAddress();
     // Cancel any pending background retry (initial connect(false) loop) so that a user
     // operation is never delayed indefinitely by a retrying connect(false) that holds the
@@ -1836,14 +1926,33 @@ class Manager extends EventEmitter {
     }
     // Serialize all BLE ops on this lock — without this, parallel user ops collide
     // on the same BLE session and the SDK rejects them with "Command already in progress".
-    const release = await this._acquireMutex(address);
-    this._mutexReleases.set(address, release);
+    if (!radioHeld || !this._mutexReleases.has(address)) {
+      // Priorité utilisateur : les tâches de fond qui attendent la radio s'effaceront, et
+      // une lecture de journal en cours est écourtée (le probe s'arrête à la sonde suivante).
+      this._userOpsWaiting++;
+      for (const other of this.pairedLocks.values()) {
+        if (other._processingOperationLog && !other._oplogAbandoned) {
+          console.log('Lecture du journal de', other.getAddress(), 'écourtée pour une commande utilisateur');
+          other._oplogAbandoned = true;
+        }
+      }
+      let release;
+      try {
+        release = await this._acquireMutex(address);
+      } finally {
+        this._userOpsWaiting--;
+      }
+      this._mutexReleases.set(address, release);
+    }
     this.waitingForConnect.add(address);
+    const giveUp = () => {
+      this.waitingForConnect.delete(address);
+      if (!keepRadio) this._releaseMutex(address);
+      return false;
+    };
     if (this.scanning) {
       if (!(await this._stopScanForOp())) {
-        this.waitingForConnect.delete(address);
-        this._releaseMutex(address);
-        return false;
+        return giveUp();
       }
     }
     // Reuse the existing session only if it satisfies the admin requirement — a connected
@@ -1851,26 +1960,28 @@ class Manager extends EventEmitter {
     // macro_adminLogin internally and fail the same way).
     if (lock.isConnected() && (!needsAdmin || lock.adminAuth)) return true;
     if ((await this._waitForConnecting(lock, address)) && (!needsAdmin || lock.adminAuth)) return true;
-    for (let attempt = 1; attempt <= 4; attempt++) {
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       if (lock.isConnected() && (!needsAdmin || lock.adminAuth)) return true;
       // Gateway dropped mid-loop — remaining attempts are doomed, bail early.
       if (this.gateway === 'noble' && this.gatewayStatus === 'disconnected') {
         console.warn(`Gateway noble déconnecté pendant la connexion à ${address} — arrêt des tentatives.`);
         break;
       }
-      const result = await this._connectAttempt(lock, address, needsAdmin, attempt);
+      // Échéance de l'appelant : une tentative de moins de 5 s n'a aucune chance d'aboutir.
+      const remaining = deadline - Date.now();
+      if (remaining < 5000) break;
+      const result = await this._connectAttempt(lock, address, needsAdmin, attempt, skipDataRead, Math.min(28000, remaining));
       if (result === true) return true;
       // Exponential-ish back-off: 2 s, 4 s, 6 s between retries.
       // Valeurs doublées (vs 1s/2s/3s) pour laisser le firmware TTLock se réinitialiser
       // entre les tentatives quand checkAdmin ne répond pas.
-      if (attempt < 4) await sleep(attempt * 2000);
+      if (attempt < maxAttempts) await sleep(Math.min(attempt * 2000, Math.max(0, deadline - Date.now() - 5000)));
     }
     console.log('All connect attempts failed for', address);
-    this.waitingForConnect.delete(address);
-    // Release the mutex so a caller-side retry loop can re-acquire it without deadlocking.
+    // Release the mutex so a caller-side retry loop can re-acquire it without deadlocking
+    // (sauf keepRadio : l'appelant relance lui-même sans repasser par la file).
     // _releaseConnect (called from caller's finally) will then no-op for this address.
-    this._releaseMutex(address);
-    return false;
+    return giveUp();
   }
 
   /**
@@ -1957,6 +2068,8 @@ class Manager extends EventEmitter {
       // user op that fires the moment scanning=false flips.
       const release = await this._acquireMutex(address);
       try {
+        // Une opération utilisateur a pu prendre le relais pendant l'attente de la radio.
+        if (!this.connectQueue.has(address) || this._userOpsWaiting > 0) continue;
         // connect(false) to read device features (firmware, autoLock, passCode, etc.).
         // No withTimeout here: the SDK has internal disconnect handling that resolves the
         // promise. Wrapping with withTimeout would let the mutex be released while the SDK
@@ -1968,7 +2081,7 @@ class Manager extends EventEmitter {
           // can call startMonitor() correctly
           this.connectQueue.delete(address);
           if (lock.isConnected() && !this.waitingForConnect.has(address)) {
-            await lock.disconnect();
+            await lock.disconnect().catch(() => {});
           }
           console.log('Successful connect attempt to paired lock', address);
         } else {
@@ -1976,6 +2089,10 @@ class Manager extends EventEmitter {
           this._resetGatewayConnectState(lock);
           // lock stays in connectQueue for next retry
         }
+      } catch (error) {
+        // Sans ce catch, une exception sortait de la boucle et sautait le redémarrage du
+        // monitor plus bas : radio sourde jusqu'au prochain scan manuel.
+        console.error('Auto connect error for', address, ':', error.message);
       } finally {
         release();
       }
@@ -2013,9 +2130,13 @@ class Manager extends EventEmitter {
       // No withTimeout: the SDK has its own disconnect handling. Wrapping in withTimeout
       // releases the mutex while the SDK still has commands in flight, which causes
       // "Command already in progress" on the next connect.
-      const result = await lock.connect(false);
+      const result = await lock.connect(false).catch((error) => {
+        console.warn('Initial connect error for', lock.getAddress(), ':', error.message);
+        return false;
+      });
       if (result === true) {
         console.log('Successful connect attempt to paired lock', lock.getAddress());
+        lock._initialConnectFailures = 0;
         this.connectQueue.delete(lock.getAddress());
         if (lock.isConnected()) {
           if (this.waitingForConnect.has(lock.getAddress())) {
@@ -2025,7 +2146,7 @@ class Manager extends EventEmitter {
           } else {
             // No user operation waiting: process log and disconnect normally
             await this._processOperationLog(lock);
-            await lock.disconnect();
+            await lock.disconnect().catch(() => {});
           }
         }
         // else: lock self-disconnected after feature scan (normal TTLock behavior)
@@ -2034,6 +2155,7 @@ class Manager extends EventEmitter {
       } else {
         console.log('Unsuccessful connect attempt to paired lock', lock.getAddress());
         this._resetGatewayConnectState(lock);
+        this._onInitialConnectFailure(lock);
         // lock stays in connectQueue for retry on next scan
       }
     } finally {
@@ -2046,6 +2168,11 @@ class Manager extends EventEmitter {
    * @param {import('ttlock-sdk-js').TTLock} lock
    */
   async _handlePairedLockDiscovered(lock) {
+    // L'état initial du SDK est déduit des publicités (LOCKED dès que le bit « déverrouillé »
+    // est absent) : porte laissée ouverte sans auto-verrouillage + redémarrage de l'add-on
+    // = LOCK publié à tort. Non vérifié jusqu'à la première lecture live, que la connexion
+    // initiale (onConnected) ou _handleStatusUnverified effectue.
+    lock.statusUnverified = true;
     this._bindLockEvents(lock);
     // add it to the list of known locks immediately to prevent infinite retry loop
     this.pairedLocks.set(lock.getAddress(), lock);
@@ -2125,7 +2252,7 @@ class Manager extends EventEmitter {
     if (this._lockOfflineWatchdog) return;
     const CHECK_INTERVAL_MS = 60 * 1000;
     this._lockOfflineWatchdog = setInterval(() => {
-      const timeoutMs = (parseInt(process.env.LOCK_OFFLINE_TIMEOUT, 10) || 15) * 60 * 1000;
+      const timeoutMs = envInt('LOCK_OFFLINE_TIMEOUT', 15, 1) * 60 * 1000;
       const now = Date.now();
       // _lastSeen n'est alimenté que par les advertisements, qui ne circulent qu'en mode
       // monitor. Passerelle tombée ou monitor mort ⇒ plus aucun contact pour AUCUNE
@@ -2135,6 +2262,11 @@ class Manager extends EventEmitter {
         (this.gateway !== 'noble' || this.gatewayStatus === 'connected') &&
         this.client?.isMonitoring?.() === true;
       if (!radioListening) {
+        // Radio occupée par NOS connexions (le scan est coupé pendant chacune) : ce n'est
+        // pas une panne d'écoute, ne rien repousser — sinon chaque lecture de journal
+        // remettait à zéro le compte à rebours de toutes les serrures, qui ne passaient
+        // quasiment jamais offline.
+        if (this._bleMutex.size > 0 || this.waitingForConnect.size > 0) return;
         for (const address of this.pairedLocks.keys()) {
           if (this._lastSeen.has(address)) this._lastSeen.set(address, now);
         }
@@ -2237,19 +2369,32 @@ class Manager extends EventEmitter {
   _scheduleRetry(lock) {
     const address = lock.getAddress();
     if (this.connectRetryTimers.has(address)) return;
-    console.log('Initial connect failed for', address, '— retrying connect in 5s');
+    // Back-off exponentiel (5 s → 5 min) au lieu d'un retry toutes les 5 s à vie : chaque
+    // tentative coupe le scan, donc une serrure injoignable rendait la radio sourde pour
+    // TOUTES les serrures et retardait chaque commande.
+    const failures = lock._initialConnectFailures || 0;
+    const delay = Math.min(5000 * 2 ** Math.max(failures - 1, 0), 5 * 60 * 1000);
+    console.log('Initial connect failed for', address, `— retrying connect in ${Math.round(delay / 1000)}s`);
     const handle = setTimeout(async () => {
       console.log('Retrying initial connect for', address);
       // Hold the per-lock BLE mutex while retrying so we don't race with user ops.
       const release = await this._acquireMutex(address);
-      let result = false;
+      let succeeded = false;
+      let attempted = false;
       try {
-        // No withTimeout: the SDK has internal disconnect handling. Wrapping releases the
-        // mutex while BLE commands are still in flight → "Command already in progress" later.
-        result = await lock.connect(false);
-        this.connectRetryTimers.delete(address);
-        if (result) {
+        // Une commande utilisateur attend, ou a déjà pris le relais (connectQueue vidé par
+        // _connectLock) : céder la place.
+        if (this._userOpsWaiting > 0 || !this.connectQueue.has(address)) return;
+        attempted = true;
+        // Pas de withTimeout ici : le SDK (≥ 0.8.5) borne lui-même connect() et nettoie la
+        // session derrière lui ; un timeout externe relâchait la radio en pleine commande.
+        succeeded = (await lock.connect(false).catch((error) => {
+          console.warn('Retry connect error for', address, ':', error.message);
+          return false;
+        })) === true;
+        if (succeeded) {
           console.log('Retry connect succeeded for', address);
+          lock._initialConnectFailures = 0;
           this.connectQueue.delete(address);
           if (lock.isConnected() && !this.waitingForConnect.has(address)) {
             await this._processOperationLog(lock);
@@ -2258,17 +2403,54 @@ class Manager extends EventEmitter {
         } else {
           console.log('Retry connect failed for', address);
           this._resetGatewayConnectState(lock);
-          // If _onLockDisconnected fired during connect(false) it was blocked by the
-          // dedup guard — reschedule explicitly so the lock eventually initializes.
-          if (this.connectQueue.has(address)) {
-            this._scheduleRetry(lock);
-          }
         }
       } finally {
+        // Toujours, même si connect() a levé : un timer resté enregistré bloquait
+        // définitivement _scheduleRetry (garde ci-dessus) et laissait la serrure en file.
+        this.connectRetryTimers.delete(address);
         release();
       }
-    }, 5000);
+      if (succeeded) return;
+      if (attempted) this._onInitialConnectFailure(lock);
+      if (this.connectQueue.has(address)) {
+        this._scheduleRetry(lock);
+      }
+      // Rendre la radio à l'écoute entre deux tentatives.
+      if (!this.scanning && this._bleMutex.size === 0 && this.waitingForConnect.size === 0) {
+        this.client.startMonitor();
+      }
+    }, delay);
+    if (typeof handle.unref === 'function') handle.unref();
     this.connectRetryTimers.set(address, handle);
+  }
+
+  /**
+   * Comptabilise un échec de connexion initiale. Après 3 échecs d'affilée en mode passerelle,
+   * redémarre l'ESP32 (au plus une fois toutes les 15 min) : c'est ce qui débloque une
+   * passerelle dont la pile BLE ne répond plus aux connexions alors que le WebSocket est
+   * vivant (observé : échecs en boucle jusqu'au redémarrage manuel). Après 8 échecs, la
+   * serrure sort de la file : les chemins pilotés par les publicités (journal, vérification
+   * d'état) et les commandes utilisateur la reconnecteront d'eux-mêmes.
+   * @param {import('ttlock-sdk-js').TTLock} lock
+   */
+  _onInitialConnectFailure(lock) {
+    const address = lock.getAddress();
+    lock._initialConnectFailures = (lock._initialConnectFailures || 0) + 1;
+    const failures = lock._initialConnectFailures;
+    const REBOOT_AFTER = 3;
+    const REBOOT_COOLDOWN_MS = 15 * 60 * 1000;
+    if (
+      this.gateway === 'noble' &&
+      failures === REBOOT_AFTER &&
+      Date.now() - this._lastAutoEsp32RebootAt > REBOOT_COOLDOWN_MS
+    ) {
+      this._lastAutoEsp32RebootAt = Date.now();
+      console.warn(`[Gateway] ${failures} échecs de connexion consécutifs à ${address} — redémarrage automatique de l'ESP32`);
+      this.rebootEsp32().catch((error) => console.warn('[Gateway] Redémarrage automatique échoué:', error.message));
+    }
+    if (failures >= 8 && this.connectQueue.delete(address)) {
+      console.warn(`Connexion initiale à ${address} abandonnée après ${failures} échecs — reprise sur la prochaine activité de la serrure`);
+    }
   }
 
   /**
@@ -2345,7 +2527,7 @@ class Manager extends EventEmitter {
     // (drain de batterie). 60 s est un compromis : délai de notification max 60 s,
     // ~1 connexion/minute. Réductible via l'option si plus de réactivité est souhaitée
     // (ex. 20 s pour capturer les auto-verrouillages T+12 s).
-    const OPLOG_COOLDOWN_MS = (parseInt(process.env.OPLOG_COOLDOWN, 10) || 60) * 1000;
+    const OPLOG_COOLDOWN_MS = envInt('OPLOG_COOLDOWN', 60, 5) * 1000;
     // Circuit breaker : après des échecs consécutifs de connect(true)/admin-login,
     // _scheduleNewEventsBackoff ouvre une fenêtre de cooldown exponentielle. Tant
     // qu'elle est ouverte, on ignore complètement les pubs newEvents — c'est ce qui
@@ -2383,16 +2565,29 @@ class Manager extends EventEmitter {
     }
     // Hold the BLE mutex during this background read so we don't race with user ops.
     const release = await this._acquireMutex(lock.getAddress());
+    // Gardes revérifiées après l'attente de la radio : une lecture a pu aboutir entre-temps
+    // (cooldown), ou une commande utilisateur attend — elle passe d'abord, on réessaie après.
+    if (this._userOpsWaiting > 0 || lock.isConnected() ||
+      (lock._lastOperationLogFetch && Date.now() - lock._lastOperationLogFetch < OPLOG_COOLDOWN_MS)) {
+      release();
+      if (this._userOpsWaiting > 0 && !lock._newEventsResetTimer) {
+        lock._newEventsResetTimer = setTimeout(() => {
+          lock._newEventsResetTimer = null;
+          lock.newEvents = false; // re-emit on next advertisement → retry
+        }, 15000);
+      }
+      return;
+    }
     let weConnected = false;
     try {
       // withTimeout: a wedged connect(true) here would hold the mutex indefinitely and
-      // freeze every user op (delete passcode, unlock, …) on _acquireMutex. The finally
-      // block below force-disconnects on timeout, which clears the SDK's pending-command
-      // state so the next connect doesn't trip "Command already in progress".
+      // freeze every user op (delete passcode, unlock, …) on _acquireMutex. Plus long que
+      // le budget interne du SDK (20 s) pour le laisser abandonner proprement le premier.
       let timedOut = false;
-      const result = await withTimeout(lock.connect(true), 15000, 'newEventsConnect ' + lock.getAddress()).catch((e) => {
+      const result = await withTimeout(lock.connect(true), 25000, 'newEventsConnect ' + lock.getAddress()).catch(async (e) => {
         timedOut = true;
         console.warn('_onLockUpdated connect timed out:', e.message);
+        await this._abandonConnect(lock);
         return false;
       });
       if (!result) {
@@ -2579,7 +2774,7 @@ class Manager extends EventEmitter {
    *
    * Ce chemin est volontairement découplé de _handleNewEventsUpdate/oplog_cooldown : il ne
    * lit pas le journal d'opérations, seulement l'état verrouillé/déverrouillé, avec son
-   * propre cooldown plus court (`status_check_cooldown`, défaut 15 s) que celui de l'oplog
+   * propre cooldown plus court (`status_check_cooldown`, défaut 10 s) que celui de l'oplog
    * complet (`oplog_cooldown`, défaut 60 s). Le détail de l'opération (last_operation/
    * last_access) continue d'arriver via le cycle oplog normal.
    * @param {import('ttlock-sdk-js').TTLock} lock
@@ -2592,7 +2787,7 @@ class Manager extends EventEmitter {
     // passaient toutes les gardes ci-dessous (le cooldown n'est horodaté qu'à la fin) et
     // s'empilaient sur _acquireMutex, pour n'être écartées qu'après l'avoir obtenu.
     if (lock._statusCheckInFlight) return;
-    const STATUS_CHECK_COOLDOWN_MS = (parseInt(process.env.STATUS_CHECK_COOLDOWN, 10) || 10) * 1000;
+    const STATUS_CHECK_COOLDOWN_MS = envInt('STATUS_CHECK_COOLDOWN', 10, 2) * 1000;
     if (lock._lastStatusCheckFetch && Date.now() - lock._lastStatusCheckFetch < STATUS_CHECK_COOLDOWN_MS) {
       return;
     }
@@ -2602,21 +2797,38 @@ class Manager extends EventEmitter {
     if (lock.isConnected() || lock._processingOperationLog || this.waitingForConnect.has(lock.getAddress())) {
       return;
     }
+    // Échecs répétés (serrure hors de portée, passerelle muette) : back-off exponentiel en
+    // plus du cooldown, sinon chaque publicité relance une connexion de 25 s qui affame les
+    // commandes utilisateur.
+    const failCount = lock._statusCheckFailCount || 0;
+    if (failCount > 0 && lock._lastStatusCheckFetch) {
+      const backoff = Math.min(15000 * 2 ** (failCount - 1), 5 * 60 * 1000);
+      if (Date.now() - lock._lastStatusCheckFetch < backoff) return;
+    }
     lock._statusCheckInFlight = true;
     const release = await this._acquireMutex(lock.getAddress());
     let weConnected = false;
     try {
       // Peut avoir été résolu par une connexion concurrente pendant l'attente du mutex.
       if (!lock.statusUnverified) return;
-      const result = await withTimeout(lock.connect(true), 15000, 'statusCheckConnect ' + lock.getAddress()).catch((e) => {
+      // Une commande utilisateur attend la radio : elle passe d'abord (la prochaine
+      // publicité relancera cette vérification).
+      if (this._userOpsWaiting > 0 || lock.isConnected()) return;
+      // Horodaté dès l'acquisition de la radio, AVANT la connexion : un connect qui échoue
+      // ne doit pas laisser le cooldown vide, sinon la publicité suivante (quelques secondes
+      // plus tard) relançait une connexion complète — tempête de reconnexions.
+      lock._lastStatusCheckFetch = Date.now();
+      const result = await withTimeout(lock.connect(true), 25000, 'statusCheckConnect ' + lock.getAddress()).catch(async (e) => {
         console.warn('_handleStatusUnverified connect timed out:', e.message);
+        await this._abandonConnect(lock);
         return false;
       });
-      if (!result) {
+      if (!result || !lock.isConnected()) {
         this._resetGatewayConnectState(lock);
+        lock._statusCheckFailCount = failCount + 1;
         return;
       }
-      if (!lock.isConnected()) return;
+      lock._statusCheckFailCount = 0;
       weConnected = true;
       // connect(true) pose skipDataRead, et onConnected() teste `!this.skipDataRead` avant
       // de lancer searchBycicleStatusCommand : la branche de confirmation est sautée, et
@@ -2634,7 +2846,6 @@ class Manager extends EventEmitter {
       // laissait le compteur vide et la publicité suivante relançait aussitôt un cycle
       // complet — donc une reconnexion toutes les quelques secondes sur une serrure déjà
       // en difficulté, exactement ce que le cooldown existe pour empêcher.
-      lock._lastStatusCheckFetch = Date.now();
       await lock.getLockStatus(true);
       // getLockStatus(true) a remis statusUnverified à false : le getLockStatus() de
       // ha.updateLockState déclenché par cet émit lit désormais le cache frais, sans BLE.
@@ -2700,6 +2911,19 @@ class Manager extends EventEmitter {
       // autorisant le retour du cache oplog sans connexion admin réelle. On remet adminAuth
       // à false pour garantir que chaque appel à getOperationLog() ici effectue un vrai login.
       lock.adminAuth = false;
+      // État live lu EN PREMIER : c'est l'information la plus attendue côté HA, et la
+      // serrure coupe souvent la liaison peu après la lecture du journal (observé :
+      // « lecture live de l'état échouée … Lock is not connected » après 300 opérations).
+      // Une requête de statut ne demande pas de login admin.
+      let liveStatus = LockedStatus.UNKNOWN;
+      try {
+        liveStatus = await lock.getLockStatus(true);
+      } catch (error) {
+        console.warn(
+          `_processOperationLog [${lock.getAddress()}]: lecture live de l'état échouée, repli sur le journal:`,
+          error.message
+        );
+      }
       // Filet de sécurité : la lecture incrémentale est bornée par construction (sonde
       // limitée + budget 20 s), mais une commande BLE peut rester bloquée jusqu'à 10 s.
       // Au-delà du budget, on déconnecte pour que les boucles du SDK sortent via leur
@@ -2820,27 +3044,10 @@ class Manager extends EventEmitter {
           lastStatus = LockedStatus.LOCKED;
         }
       }
-      // Résoudre l'état AVANT d'émettre lockLock/lockUnlock : ha.js republie l'état sur ces
-      // évènements via lock.getLockStatus(), qui déclenche sa propre commande BLE tant que
-      // statusUnverified est vrai. Émettre avant cet await faisait courir les deux requêtes
-      // en concurrence sur la même connexion ("Command already in progress"), et l'entité HA
-      // restait bloquée sur son dernier état connu — typiquement après une fermeture
-      // déclenchée par le capteur de porte, où seule cette requête live confirme l'état.
-      // Lecture forcée (noCache) : sans le drapeau, getLockStatus rend le cache dès que
-      // statusUnverified est faux — un cache qui peut dater du début de la session, soit
-      // jusqu'à 45 s plus tôt (OPLOG_READ_TIMEOUT_MS). Une entrée « Porte fermée » lue à
-      // l'instant se faisait alors écraser par un UNLOCK antérieur. En repli, le journal
-      // qu'on vient de lire est la meilleure source restante.
-      let status = LockedStatus.UNKNOWN;
-      try {
-        status = await lock.getLockStatus(true);
-      } catch (error) {
-        console.warn(
-          `_processOperationLog [${lock.getAddress()}]: lecture live de l'état échouée, repli sur le journal:`,
-          error.message
-        );
-      }
-      const finalStatus = status != LockedStatus.UNKNOWN ? status : lastStatus;
+      // L'état live (lu en début de session, cf. plus haut) prime ; à défaut, la dernière
+      // opération de verrouillage/déverrouillage du journal. getLockStatus(true) lève une
+      // erreur en cas d'échec au lieu de rendre un cache périmé (SDK ≥ 0.8.5).
+      const finalStatus = liveStatus != LockedStatus.UNKNOWN ? liveStatus : lastStatus;
       if (finalStatus === LockedStatus.UNLOCKED) this.emit('lockUnlock', lock);
       else if (finalStatus === LockedStatus.LOCKED) this.emit('lockLock', lock);
       return true;
