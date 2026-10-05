@@ -72,6 +72,29 @@ function normaliseNobleOptions(options) {
  * @param {string} options.gateway_pass  Gateway password
  */
 export default async function init(options = {}) {
+  /** @type {HomeAssistant|null} */
+  let ha = null;
+
+  // Arrêt propre sur SIGTERM (stop / mise à jour par le Supervisor) : publier 'offline'
+  // et fermer MQTT, puis quitter avec 0 — sinon le process est tué (exit 143).
+  // Enregistré dès le début : un arrêt peut survenir pendant l'init.
+  let shuttingDown = false;
+  const shutdown = async (signal) => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    console.log(`${signal} received, shutting down...`);
+    // Garde-fou : un broker qui ne répond pas ne doit pas bloquer jusqu'au SIGKILL.
+    setTimeout(() => process.exit(0), 5000).unref();
+    try {
+      await ha?.disconnect();
+    } catch (error) {
+      console.error('Shutdown error:', error.message);
+    }
+    process.exit(0);
+  };
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
+  process.on('SIGINT', () => shutdown('SIGINT'));
+
   // load saved data
   if (options.settingsPath) {
     store.setDataPath(options.settingsPath);
@@ -94,7 +117,7 @@ export default async function init(options = {}) {
       mqttPass: options.mqttPass || undefined,
       discovery_prefix: options.discovery_prefix || undefined
     };
-    const ha = new HomeAssistant(haOptions);
+    ha = new HomeAssistant(haOptions);
     await ha.connect();
   }
 

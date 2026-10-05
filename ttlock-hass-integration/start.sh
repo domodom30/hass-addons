@@ -49,4 +49,6 @@ fi
 # up itself — which requires the NET_ADMIN capability (see config.yaml privileged).
 # Skipped in gateway mode (BLE runs on the remote ESP32, not the local adapter).
 cd /app
-npm start
+# exec : node remplace le shell et reçoit directement le SIGTERM du Supervisor
+# (sans exec, bash meurt sur le signal sans le transmettre → exit 143, pas d'arrêt propre).
+exec node ./index.js

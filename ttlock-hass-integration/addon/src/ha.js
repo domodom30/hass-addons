@@ -55,6 +55,7 @@ class HomeAssistant {
     this.connected = false;
     this._connecting = false;
     this._reconnectTimer = null;
+    this._stopping = false;
 
     manager.on('lockPaired', this._onLockPaired.bind(this));
     manager.on('lockConnected', this._onLockConnected.bind(this));
@@ -70,7 +71,7 @@ class HomeAssistant {
 
   /** Schedule a single reconnection attempt (guarded against duplicates). */
   _scheduleReconnect() {
-    if (this._reconnectTimer) return;
+    if (this._reconnectTimer || this._stopping) return;
     this._reconnectTimer = setTimeout(() => {
       this._reconnectTimer = null;
       this.connect();
@@ -78,7 +79,7 @@ class HomeAssistant {
   }
 
   async connect() {
-    if (this._connecting) return;
+    if (this._connecting || this._stopping) return;
     this._connecting = true;
     try {
       // Tear down any previous client first — the old 'close' handler must not
@@ -104,6 +105,13 @@ class HomeAssistant {
         }
       });
 
+      // Arrêt demandé pendant la connexion : disconnect() n'a pas vu ce client.
+      if (this._stopping) {
+        await this.client.end(true).catch(() => {});
+        this.client = null;
+        return;
+      }
+
       this.client.on('message', this._onMQTTMessage.bind(this));
       this.client.on('error', (err) => {
         console.error('MQTT error:', err.message);
@@ -128,6 +136,31 @@ class HomeAssistant {
     } finally {
       this._connecting = false;
     }
+  }
+
+  /**
+   * Graceful shutdown: publish bridge 'offline' then close the MQTT connection.
+   * A clean DISCONNECT suppresses the Last Will, so 'offline' must be published
+   * explicitly — otherwise HA keeps the entities available after a stop/update.
+   */
+  async disconnect() {
+    this._stopping = true;
+    if (this._reconnectTimer) {
+      clearTimeout(this._reconnectTimer);
+      this._reconnectTimer = null;
+    }
+    const client = this.client;
+    if (!client) return;
+    // connected = false avant end() : le handler 'close' ne doit pas planifier de reconnexion.
+    const wasConnected = this.connected;
+    this.connected = false;
+    if (wasConnected) {
+      await client
+        .publish(BRIDGE_AVAILABILITY_TOPIC, PAYLOAD_OFFLINE, { retain: true, qos: 1 })
+        .catch((e) => console.error('MQTT offline publish error:', e.message));
+    }
+    await client.end().catch(() => {});
+    this.client = null;
   }
 
   /**

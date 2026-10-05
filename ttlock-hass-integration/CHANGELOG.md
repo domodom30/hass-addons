@@ -1,6 +1,22 @@
 # Changelog
 
 
+## [2.8.4] — 2026-10-05
+
+### 🐛 Fixed
+
+- **Addon killed on stop / update (exit code 143) instead of shutting down
+  cleanly**: `start.sh` ran `npm start` without `exec`, so the Supervisor's
+  SIGTERM reached the shell, which died without forwarding it to Node. Node
+  now replaces the shell (`exec node ./index.js`) and handles SIGTERM/SIGINT:
+  it publishes `offline` on `ttlock/bridge/availability`, closes the MQTT
+  connection and exits with code 0 (forced exit after 5 s if the broker does
+  not answer).
+- Entities now become unavailable in Home Assistant when the addon stops:
+  a clean MQTT disconnect does not trigger the Last Will, so `offline` is now
+  published explicitly before disconnecting.
+
+
 ## [2.8.3] — 2026-10-05
 
 ### 🐛 Fixed
