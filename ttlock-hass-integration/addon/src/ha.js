@@ -50,6 +50,8 @@ class HomeAssistant {
     this.discovery_prefix = options.discovery_prefix || 'homeassistant';
     /** @type {Map<string, string>} address → last published name (alias or SDK name) */
     this.configuredLocks = new Map();
+    /** @type {Map<string, 'LOCK'|'UNLOCK'>} address → last verified state published */
+    this.lastVerifiedState = new Map();
     this.connected = false;
     this._connecting = false;
     this._reconnectTimer = null;
@@ -215,7 +217,10 @@ class HomeAssistant {
           payload_unlock: 'UNLOCK',
           state_locked: 'LOCK',
           state_unlocked: 'UNLOCK',
-          value_template: '{{ value_json.state }}',
+          // `state` est absent quand l'état n'est pas vérifié (cf. updateLockState) : default('')
+          // rend un payload vide, que la plateforme lock de HA ignore (état conservé) au lieu de
+          // journaliser « 'dict object' has no attribute 'state' ».
+          value_template: "{{ value_json.state | default('') }}",
           optimistic: false,
           retain: false,
           qos: 1,
@@ -406,8 +411,16 @@ class HomeAssistant {
       // statusUnverified : le cache vient du bit isUnlock de l'advertisement, non probant
       // (ex. refermeture par le capteur de porte). On ne publie pas un état potentiellement
       // périmé — l'état confirmé arrivera par l'évènement émis après la vérification.
+      // Sinon on reprend le dernier état VÉRIFIÉ : le message est retained, et un payload sans
+      // `state` écraserait l'état confirmé — après un redémarrage de HA la serrure resterait
+      // `unknown` jusqu'à la prochaine opération. Ce n'est pas l'état non probant du cache,
+      // c'est celui que HA affiche déjà.
+      const address = lock.getAddress();
       if (lockedStatus != LockedStatus.UNKNOWN && !lock.statusUnverified) {
         statePayload.state = lockedStatus == LockedStatus.LOCKED ? 'LOCK' : 'UNLOCK';
+        this.lastVerifiedState.set(address, statePayload.state);
+      } else if (this.lastVerifiedState.has(address)) {
+        statePayload.state = this.lastVerifiedState.get(address);
       }
       await this._publish(stateTopic(id), statePayload, { retain: true, qos: 1 });
     } catch (error) {
@@ -437,8 +450,9 @@ class HomeAssistant {
    * Publish the most recent operation-log entry (who locked/unlocked, when).
    * Reads the persisted log only — no BLE.
    * @param {import('ttlock-sdk-js').TTLock} lock
+   * @param {boolean} [force] republish even if the recordNumber was already published
    */
-  async publishLastOperation(lock) {
+  async publishLastOperation(lock, force = false) {
     if (!this.connected) return;
     try {
       const address = lock.getAddress();
@@ -450,7 +464,7 @@ class HomeAssistant {
       // mémoire, pour ne pas republier — et donc re-déclencher des automations HA —
       // à chaque redémarrage de l'addon (les messages retained suffisent).
       const lastRecord = last.recordNumber ?? null;
-      if (store.getLastPublishedRecord(address, 'op') === lastRecord) return;
+      if (!force && store.getLastPublishedRecord(address, 'op') === lastRecord) return;
       const id = lockIdFromAddress(address);
       await this._publish(lastOperationTopic(id), buildLastOperationPayload(last), {
         retain: true,
@@ -468,8 +482,9 @@ class HomeAssistant {
    * auto-lock / door-sensor records that would otherwise mask the method.
    * Reads the persisted log only — no BLE.
    * @param {import('ttlock-sdk-js').TTLock} lock
+   * @param {boolean} [force] republish even if the recordNumber was already published
    */
-  async publishLastUnlock(lock) {
+  async publishLastUnlock(lock, force = false) {
     if (!this.connected) return;
     try {
       const address = lock.getAddress();
@@ -478,7 +493,7 @@ class HomeAssistant {
       if (!last) return;
       // Déduplication : même logique (persistée) que publishLastOperation.
       const lastRecord = last.recordNumber ?? null;
-      if (store.getLastPublishedRecord(address, 'unlock') === lastRecord) return;
+      if (!force && store.getLastPublishedRecord(address, 'unlock') === lastRecord) return;
       const id = lockIdFromAddress(address);
       await this._publish(lastUnlockTopic(id), buildLastOperationPayload(last), {
         retain: true,
@@ -497,15 +512,18 @@ class HomeAssistant {
    */
   async _republishAll() {
     await this._publish(BRIDGE_AVAILABILITY_TOPIC, PAYLOAD_ONLINE, { retain: true, qos: 1 });
-    for (const address of this.configuredLocks.keys()) {
-      const lock = manager.pairedLocks?.get?.(address);
-      if (!lock) continue;
+    // Toutes les serrures appairées, pas seulement configuredLocks : un lockPaired/lockConnected
+    // émis avant la connexion MQTT est sorti de configureLock sur `!this.connected`, sans
+    // enregistrer la serrure — elle ne serait jamais republiée avant le prochain évènement BLE.
+    for (const lock of manager.pairedLocks?.values?.() ?? []) {
       try {
         await this.configureLock(lock, true);
         await this.publishLockAvailability(lock, true);
         await this.updateLockState(lock);
-        await this.publishLastOperation(lock);
-        await this.publishLastUnlock(lock);
+        // force : le broker a pu perdre ses messages retained, la déduplication par
+        // recordNumber laisserait alors last_operation/last_access vides.
+        await this.publishLastOperation(lock, true);
+        await this.publishLastUnlock(lock, true);
         await this._replayMissedEvents(lock);
       } catch (error) {
         console.error('MQTT republish error:', error.message);
@@ -634,6 +652,7 @@ class HomeAssistant {
         await this._publish(topic, '', { retain: true, qos: 1 });
       }
       this.configuredLocks.delete(lock.getAddress());
+      this.lastVerifiedState.delete(lock.getAddress());
       store.clearPublishedRecords(lock.getAddress());
     } catch (error) {
       console.error('MQTT _onLockUnpaired error:', error.message);
@@ -748,12 +767,14 @@ class HomeAssistant {
       if (process.env.MQTT_DEBUG == '1') {
         console.log('MQTT command:', parsed.address, command);
       }
+      // Promesses non attendues (handler d'EventEmitter) : sans .catch(), un rejet de
+      // _connectLock & co devient une unhandledRejection, fatale depuis Node 15.
       switch (command) {
         case 'LOCK':
-          manager.lockLock(parsed.address);
+          manager.lockLock(parsed.address).catch((e) => console.error('MQTT LOCK command error:', e.message));
           break;
         case 'UNLOCK':
-          manager.unlockLock(parsed.address);
+          manager.unlockLock(parsed.address).catch((e) => console.error('MQTT UNLOCK command error:', e.message));
           break;
       }
     } else if (process.env.MQTT_DEBUG == '1') {

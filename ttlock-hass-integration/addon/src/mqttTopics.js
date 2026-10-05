@@ -6,15 +6,8 @@
  * everything goes through here.
  */
 
-// Prefix for data topics (state / commands / availability). Distinct from the
-// Home Assistant discovery prefix (configurable, defaults to 'homeassistant').
 export const DATA_PREFIX = 'ttlock';
-
-// Bridge-wide availability topic. The addon publishes 'online' here on every
-// (re)connect and registers an MQTT Last Will so the broker publishes
-// 'offline' automatically if the addon crashes or loses the network.
 export const BRIDGE_AVAILABILITY_TOPIC = DATA_PREFIX + '/bridge/availability';
-
 export const PAYLOAD_ONLINE = 'online';
 export const PAYLOAD_OFFLINE = 'offline';
 
@@ -250,7 +243,10 @@ export function buildLastOperationPayload(op) {
   return {
     event: op.recordTypeName ?? null,
     category: op.recordTypeCategory ?? null,
-    by: op.passwordName || op.password || null,
+    // Jamais `op.password` en repli : pour un code clavier c'est le code PIN lui-même
+    // (_enrichOperation ne nomme que cartes IC et empreintes), et pour une carte sans alias
+    // son numéro — les deux finiraient en clair dans MQTT (retained) et l'historique HA.
+    by: op.passwordName || null,
     record_type: op.recordType ?? null,
     record_number: op.recordNumber ?? null,
     timestamp: operateDateToIso(op.operateDate),
