@@ -438,9 +438,11 @@ class HomeAssistant {
       // chaque lockLock/lockUnlock/lockStateUpdated — même raisonnement que api/Lock.js.
       const lockedStatus = lock.lockedStatus;
       const statePayload = {
-        battery: lock.getBattery(),
         rssi: lock.getRssi()
       };
+      // -1 = jamais lu (valeur initiale du SDK) : ne pas publier un niveau de batterie fictif.
+      const battery = lock.getBattery();
+      if (typeof battery === 'number' && battery >= 0) statePayload.battery = battery;
       // statusUnverified : le cache vient du bit isUnlock de l'advertisement, non probant
       // (ex. refermeture par le capteur de porte). On ne publie pas un état potentiellement
       // périmé — l'état confirmé arrivera par l'évènement émis après la vérification.
@@ -785,6 +787,18 @@ class HomeAssistant {
   }
 
   /**
+   * @param {string} address
+   * @param {boolean} ok résultat de manager.lockLock/unlockLock
+   */
+  _afterLockCommand(address, ok) {
+    if (ok === true) return;
+    // Commande échouée ou remplacée : republier l'état connu pour que HA quitte l'état
+    // transitoire et n'affiche pas silencieusement une commande qui n'a jamais eu lieu.
+    const lock = manager.pairedLocks.get(address);
+    if (lock) this.updateLockState(lock);
+  }
+
+  /**
    *
    * @param {string} topic
    * @param {Buffer} message
@@ -804,10 +818,14 @@ class HomeAssistant {
       // _connectLock & co devient une unhandledRejection, fatale depuis Node 15.
       switch (command) {
         case 'LOCK':
-          manager.lockLock(parsed.address).catch((e) => console.error('MQTT LOCK command error:', e.message));
+          manager.lockLock(parsed.address)
+            .then((ok) => this._afterLockCommand(parsed.address, ok))
+            .catch((e) => console.error('MQTT LOCK command error:', e.message));
           break;
         case 'UNLOCK':
-          manager.unlockLock(parsed.address).catch((e) => console.error('MQTT UNLOCK command error:', e.message));
+          manager.unlockLock(parsed.address)
+            .then((ok) => this._afterLockCommand(parsed.address, ok))
+            .catch((e) => console.error('MQTT UNLOCK command error:', e.message));
           break;
       }
     } else if (process.env.MQTT_DEBUG == '1') {

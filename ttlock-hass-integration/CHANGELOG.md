@@ -1,6 +1,64 @@
 # Changelog
 
 
+## [2.8.6] — 2026-10-05
+
+### ⚡ Faster lock / unlock
+
+- **No admin login before lock/unlock**: the SDK's lock()/unlock() negotiate
+  their own challenge, so the extra checkAdmin + checkRandom round trips (up to
+  ~25 s when the lock did not answer) are gone, together with the post-connect
+  data reads (`connect(true)`). The last attempt still uses the full path as a
+  fallback.
+- **User commands go first**: background work (operation-log reads, state
+  checks, initial connects) now steps aside when a command is waiting, and an
+  operation-log read in progress is cut short, instead of making the command
+  wait up to a minute behind it.
+- **Bounded duration**: a command now gives up after 45 s instead of retrying
+  (12 connection attempts) for several minutes.
+
+### 🐛 Fixed
+
+- **Wrong final state after quick LOCK/UNLOCK sequences**: the latest request
+  now wins. A command made obsolete by a newer one is not executed, and a retry
+  can no longer run after an opposite command (retries keep the radio).
+- **Live state read failing after the operation-log read**
+  (`lecture live de l'état échouée … Lock is not connected`): the state is now
+  read first, while the session is alive.
+- **Reconnection storm on an unreachable lock**: the state-check cooldown is
+  now set before connecting (a failed connect used to restart a full connection
+  on the next advertisement), with exponential back-off on repeated failures.
+- **Initial connection retried every 5 s forever**: exponential back-off
+  (5 s → 5 min), the BLE monitor is restarted between attempts, and after 3
+  consecutive failures in gateway mode the ESP32 is rebooted automatically (at
+  most every 15 min). This is what got the gateway out of the stuck state in the
+  reported logs. After 8 failures, the lock leaves the queue and is reconnected
+  on its next activity.
+- **BLE monitor silent for 3 min before recovery**: threshold lowered to 90 s,
+  the monitor watchdog also runs with a local BLE adapter, and a lock waiting
+  for its connect retry no longer keeps the monitor stopped.
+- **Auto-lock not reflected after an unlock from HA**: the state is checked
+  right after the auto-lock delay.
+- **LOCK published at startup for a lock left open**: the state stays
+  unverified until the first live read.
+- **Locks rarely marked offline**: our own BLE sessions no longer reset the
+  offline countdown of every lock.
+- Failed or superseded commands republish the known state to Home Assistant.
+- Battery is no longer published as `-1` before the first reading.
+- Timed-out connections are now cleaned up (no orphan session, no
+  "Connect already in progress" on the next attempt); BLE timers are released.
+- Options `oplog_cooldown`, `status_check_cooldown`, `lock_offline_timeout`
+  and `max_oplog` reject negative values.
+
+### ⬆️ Dependencies
+
+- `@domodom30/ttlock-sdk-js` 0.8.4 → 0.8.5: timeouts on every BLE/GATT step
+  (connections could hang forever), gateway connection state preserved across
+  advertisements, no replay of stale commands after a gateway reconnect,
+  unknown lock status no longer reported as unlocked, no LOCK → UNLOCK → LOCK
+  flicker after a lock command.
+
+
 ## [2.8.5] — 2026-10-05
 
 ### 🐛 Fixed

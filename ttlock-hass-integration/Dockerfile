@@ -38,9 +38,8 @@ COPY start.sh /start.sh
 RUN chmod +x /start.sh
 
 # install npm deps (BLE needs build tools)
-# NPM_CONFIG_INCLUDE=dev ensures devDependencies (typescript) are available
-# for the SDK's prepare/build script when installing from GitHub source.
-# Once built, devDependencies are no longer needed at runtime.
+# The SDK comes prebuilt from the npm registry (@domodom30/ttlock-sdk-js);
+# NPM_CONFIG_INCLUDE=dev is kept for native BLE modules built from source.
 RUN NPM_CONFIG_INCLUDE=dev npm install --build-from-source
 
 # =========================

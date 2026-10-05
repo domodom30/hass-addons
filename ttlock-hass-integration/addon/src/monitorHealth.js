@@ -16,8 +16,12 @@
  * importable en test à cause du binding noble natif — même découpage que `oplog.js`.
  */
 
-/** Silence toléré avant de conclure que l'état ment. */
-export const MONITOR_SILENCE_MS = 3 * 60 * 1000;
+/**
+ * Silence toléré avant de conclure que l'état ment. 90 s (et non 3 min) : une serrure
+ * émet toutes les quelques secondes, et pendant ces 3 minutes plus aucun changement d'état
+ * n'arrivait à HA (observé : reprise forcée seulement après 180 s de silence).
+ */
+export const MONITOR_SILENCE_MS = 90 * 1000;
 
 /**
  * Délai minimum entre deux reprises forcées : quand les serrures sont réellement hors de
