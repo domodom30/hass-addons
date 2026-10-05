@@ -1,6 +1,32 @@
 # Changelog
 
 
+## [2.8.3] — 2026-10-05
+
+### 🐛 Fixed
+
+- **Lock stuck on `unknown` after a Home Assistant restart**: while the lock
+  status was unverified, the retained state message was published without
+  `state`, overwriting the last confirmed state. The last verified state is
+  now republished instead, and the discovery `value_template` defaults to an
+  empty value (no more `'dict object' has no attribute 'state'` warnings).
+- **Locks missing after an MQTT reconnect**: all paired locks are now
+  republished (not only those already configured), and `last_operation` /
+  `last_access` are force-republished in case the broker lost its retained
+  messages.
+- Unhandled rejections from MQTT `LOCK` / `UNLOCK` commands are now caught
+  instead of crashing the addon.
+
+### 🔒 Security
+
+- The `by` field of `last_operation` / `last_access` no longer falls back to
+  the raw keypad PIN code or card number when no name is set.
+
+### ⬆️ Dependencies
+
+- `@domodom30/ttlock-sdk-js` 0.8.2 → 0.8.3.
+
+
 ## [2.8.2] — 2026-09-27
 
 ### 🐛 Fixed
