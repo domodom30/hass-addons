@@ -1,6 +1,22 @@
 # Changelog
 
 
+## [2.8.5] — 2026-10-05
+
+### 🐛 Fixed
+
+- **Battery level briefly jumping to 100 %**: right after a BLE session, the
+  lock advertises a bogus 100 % for 1–2 s, making the battery sensor go
+  87 → 100 → 87. Advertised rises of more than 5 points are now only applied
+  once seen for 60 s (e.g. after replacing the batteries); drops and small
+  fluctuations are still applied immediately.
+
+### ⬆️ Dependencies
+
+- `@domodom30/ttlock-sdk-js` 0.8.3 → 0.8.4 (fix above; also removes the
+  temporary battery diagnostic added in 0.8.3).
+
+
 ## [2.8.4] — 2026-10-05
 
 ### 🐛 Fixed
