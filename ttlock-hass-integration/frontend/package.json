@@ -1,0 +1,42 @@
+{
+  "name": "ttlock-hass-integration-frontend",
+  "version": "2.8.5",
+  "type": "module",
+  "author": "Domodom30 <domodom30@gmail.com>",
+  "scripts": {
+    "dev": "vite --host",
+    "build": "vite build",
+    "serve": "vite preview --host",
+    "lint": "eslint src --ext .vue,.js",
+    "deploy": "npm run build && rm -rf ../addon/frontend/* && cp -r ./dist/* ../addon/frontend/"
+  },
+  "dependencies": {
+    "core-js": "^3.6.5",
+    "moment": "^2.29.1",
+    "reconnecting-websocket": "^4.4.0",
+    "vue": "^3.4.0",
+    "vue-i18n": "^9.0.0",
+    "vue-router": "^4.0.0",
+    "vuetify": "^3.0.0",
+    "vuex": "^4.0.0",
+    "json-editor-vue": "^0.10.0",
+    "@mdi/font": "^7.0.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^5.0.0",
+    "eslint": "^8.0.0",
+    "eslint-plugin-vue": "^9.0.0",
+    "sass": "^1.19.0",
+    "vite": "^5.0.0",
+    "vite-plugin-vuetify": "^2.0.0"
+  },
+  "bugs": {
+    "url": "https://github.com/domodom30/hass-addons/issues"
+  },
+  "homepage": "https://github.com/domodom30/hass-addons/tree/master/ttlock-hass-integration",
+  "license": "GPL-3.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/domodom30/ttlock-hass-integration.git"
+  }
+}

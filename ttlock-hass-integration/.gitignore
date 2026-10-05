@@ -1,0 +1,8 @@
+lockData.json
+aliasData.json
+dev.sh
+claude/*.*
+.claude/
+.github/copilot-instructions.md
+*.local.ps1
+addon/dev-data/

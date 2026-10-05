@@ -1,0 +1,820 @@
+import { readFileSync } from 'node:fs';
+import mqtt from 'async-mqtt';
+import manager from './manager.js';
+import store from './store.js';
+import { LockedStatus } from '@domodom30/ttlock-sdk-js';
+import {
+  BRIDGE_AVAILABILITY_TOPIC,
+  PAYLOAD_ONLINE,
+  PAYLOAD_OFFLINE,
+  lockIdFromAddress,
+  stateTopic,
+  commandTopic,
+  commandSubscription,
+  lockAvailabilityTopic,
+  lastOperationTopic,
+  lastUnlockTopic,
+  doorSensorFaultTopic,
+  buildDoorSensorFaultPayload,
+  operationEventTopic,
+  discoveryConfigTopic,
+  REMOVED_DISCOVERY_OBJECT_IDS,
+  parseCommandTopic,
+  latestOperation,
+  latestUnlock,
+  buildLastOperationPayload,
+  buildOperationEventPayload,
+  OPERATION_EVENT_TYPES,
+  isNewerOperation
+} from './mqttTopics.js';
+
+// Read once at module load — used to populate the discovery `origin` block (HA
+// convention since 2023.8: attributes entities to the integration that created them,
+// shown on the device page). package.json is always present alongside this file.
+const ADDON_VERSION = JSON.parse(readFileSync(new URL('../package.json', import.meta.url))).version;
+
+class HomeAssistant {
+  /**
+   *
+   * @param {import('./manager')} manager
+   * @param {Object} options
+   * @param {string} options.mqttUrl
+   * @param {string} [options.mqttUser] optional — anonymous broker supported
+   * @param {string} [options.mqttPass] optional — anonymous broker supported
+   * @param {string} [options.discovery_prefix]
+   */
+  constructor(options) {
+    this.mqttUrl = options.mqttUrl;
+    this.mqttUser = options.mqttUser;
+    this.mqttPass = options.mqttPass;
+    this.discovery_prefix = options.discovery_prefix || 'homeassistant';
+    /** @type {Map<string, string>} address → last published name (alias or SDK name) */
+    this.configuredLocks = new Map();
+    /** @type {Map<string, 'LOCK'|'UNLOCK'>} address → last verified state published */
+    this.lastVerifiedState = new Map();
+    this.connected = false;
+    this._connecting = false;
+    this._reconnectTimer = null;
+    this._stopping = false;
+
+    manager.on('lockPaired', this._onLockPaired.bind(this));
+    manager.on('lockConnected', this._onLockConnected.bind(this));
+    manager.on('lockUnlock', this._onLockUnlock.bind(this));
+    manager.on('lockLock', this._onLockLock.bind(this));
+    manager.on('lockUpdated', this._onLockBatteryUpdated.bind(this));
+    manager.on('lockUnpaired', this._onLockUnpaired.bind(this));
+    manager.on('lockStateUpdated', this._onLockStateUpdated.bind(this));
+    manager.on('lockOffline', this._onLockOffline.bind(this));
+    manager.on('lockOnline', this._onLockOnline.bind(this));
+    manager.on('lockOperation', this._onLockOperation.bind(this));
+  }
+
+  /** Schedule a single reconnection attempt (guarded against duplicates). */
+  _scheduleReconnect() {
+    if (this._reconnectTimer || this._stopping) return;
+    this._reconnectTimer = setTimeout(() => {
+      this._reconnectTimer = null;
+      this.connect();
+    }, 5000);
+  }
+
+  async connect() {
+    if (this._connecting || this._stopping) return;
+    this._connecting = true;
+    try {
+      // Tear down any previous client first — the old 'close' handler must not
+      // survive, otherwise listeners accumulate and several clients reconnect
+      // in parallel.
+      if (this.client) {
+        this.client.removeAllListeners();
+        await this.client.end(true).catch(() => {});
+        this.client = null;
+      }
+
+      this.client = await mqtt.connectAsync(this.mqttUrl, {
+        username: this.mqttUser || undefined,
+        password: this.mqttPass || undefined,
+        // Disable mqtt.js' built-in auto-reconnect — we drive a single
+        // reconnection loop ourselves via the 'close' handler.
+        reconnectPeriod: 0,
+        will: {
+          topic: BRIDGE_AVAILABILITY_TOPIC,
+          payload: PAYLOAD_OFFLINE,
+          qos: 1,
+          retain: true
+        }
+      });
+
+      // Arrêt demandé pendant la connexion : disconnect() n'a pas vu ce client.
+      if (this._stopping) {
+        await this.client.end(true).catch(() => {});
+        this.client = null;
+        return;
+      }
+
+      this.client.on('message', this._onMQTTMessage.bind(this));
+      this.client.on('error', (err) => {
+        console.error('MQTT error:', err.message);
+      });
+      this.client.on('close', () => {
+        if (this.connected) {
+          console.log('MQTT disconnected, reconnecting in 5s...');
+          this.connected = false;
+          this._scheduleReconnect();
+        }
+      });
+
+      await this.client.subscribe(commandSubscription(), { qos: 1 });
+      this.connected = true;
+      console.log('MQTT connected');
+      // Publishes bridge availability 'online' then republishes every known
+      // lock — required because the broker may have restarted.
+      await this._republishAll();
+    } catch (error) {
+      console.error('MQTT connection failed:', error.message);
+      this._scheduleReconnect();
+    } finally {
+      this._connecting = false;
+    }
+  }
+
+  /**
+   * Graceful shutdown: publish bridge 'offline' then close the MQTT connection.
+   * A clean DISCONNECT suppresses the Last Will, so 'offline' must be published
+   * explicitly — otherwise HA keeps the entities available after a stop/update.
+   */
+  async disconnect() {
+    this._stopping = true;
+    if (this._reconnectTimer) {
+      clearTimeout(this._reconnectTimer);
+      this._reconnectTimer = null;
+    }
+    const client = this.client;
+    if (!client) return;
+    // connected = false avant end() : le handler 'close' ne doit pas planifier de reconnexion.
+    const wasConnected = this.connected;
+    this.connected = false;
+    if (wasConnected) {
+      await client
+        .publish(BRIDGE_AVAILABILITY_TOPIC, PAYLOAD_OFFLINE, { retain: true, qos: 1 })
+        .catch((e) => console.error('MQTT offline publish error:', e.message));
+    }
+    await client.end().catch(() => {});
+    this.client = null;
+  }
+
+  /**
+   * Construct a unique ID for a lock, based on the MAC address
+   * @param {import('ttlock-sdk-js').TTLock} lock
+   */
+  getLockId(lock) {
+    return lockIdFromAddress(lock.getAddress());
+  }
+
+  /**
+   * Build the Home Assistant device block shared by every entity of a lock.
+   * @param {import('ttlock-sdk-js').TTLock} lock
+   * @param {string} id
+   */
+  _buildDevice(lock, id) {
+    const address = lock.getAddress();
+    const deviceInfo = lock.deviceInfo || store.getDeviceInfo(address);
+    const rawModel = lock.getModel();
+    const rawFirmware = lock.getFirmware();
+    const rawManufacturer = lock.getManufacturer();
+    return {
+      identifiers: ['ttlock_' + id],
+      name: store.getLockAlias(address) || lock.getName(),
+      manufacturer: rawManufacturer && rawManufacturer !== 'unknown' ? rawManufacturer : '',
+      model: rawModel && rawModel !== 'unknown' ? rawModel : deviceInfo?.modelNum || '',
+      sw_version: rawFirmware && rawFirmware !== 'unknown' ? rawFirmware : deviceInfo?.firmwareRevision || ''
+    };
+  }
+
+  /**
+   * Hybrid availability: an entity is available only when BOTH the bridge and
+   * the lock report 'online' (availability_mode: all).
+   * @param {string} id
+   */
+  _hybridAvailability(id) {
+    return {
+      availability: [
+        { topic: BRIDGE_AVAILABILITY_TOPIC, payload_available: PAYLOAD_ONLINE, payload_not_available: PAYLOAD_OFFLINE },
+        { topic: lockAvailabilityTopic(id), payload_available: PAYLOAD_ONLINE, payload_not_available: PAYLOAD_OFFLINE }
+      ],
+      availability_mode: 'all'
+    };
+  }
+
+  /**
+   * `origin` block shared by every discovery payload (HA convention since 2023.8) —
+   * attributes the entities to this integration on the device/entity info page.
+   */
+  _origin() {
+    return {
+      origin: {
+        name: 'TTLock Home Assistant Integration',
+        sw_version: ADDON_VERSION,
+        support_url: 'https://github.com/domodom30/hass-addons/issues'
+      }
+    };
+  }
+
+  /**
+   * Configure a lock device in HA
+   * @param {import('ttlock-sdk-js').TTLock} lock
+   * @param {boolean} [force] republish discovery even if already configured
+   */
+  async configureLock(lock, force = false) {
+    if (!this.connected) return;
+    const address = lock.getAddress();
+    const name = store.getLockAlias(address) || lock.getName();
+    if (!force && this.configuredLocks.get(address) === name) return;
+
+    const id = lockIdFromAddress(address);
+    const device = this._buildDevice(lock, id);
+    const avail = this._hybridAvailability(id);
+    const origin = this._origin();
+
+    const entities = [
+      {
+        component: 'lock',
+        objectId: 'lock',
+        payload: {
+          unique_id: 'ttlock_' + id,
+          name: name,
+          device: device,
+          state_topic: stateTopic(id),
+          command_topic: commandTopic(id),
+          payload_lock: 'LOCK',
+          payload_unlock: 'UNLOCK',
+          state_locked: 'LOCK',
+          state_unlocked: 'UNLOCK',
+          // `state` est absent quand l'état n'est pas vérifié (cf. updateLockState) : default('')
+          // rend un payload vide, que la plateforme lock de HA ignore (état conservé) au lieu de
+          // journaliser « 'dict object' has no attribute 'state' ».
+          value_template: "{{ value_json.state | default('') }}",
+          optimistic: false,
+          retain: false,
+          qos: 1,
+          ...avail,
+          ...origin
+        }
+      },
+      {
+        component: 'sensor',
+        objectId: 'battery',
+        payload: {
+          unique_id: 'ttlock_' + id + '_battery',
+          name: name + ' Battery',
+          device: device,
+          device_class: 'battery',
+          state_class: 'measurement',
+          entity_category: 'diagnostic',
+          unit_of_measurement: '%',
+          state_topic: stateTopic(id),
+          value_template: '{{ value_json.battery }}',
+          qos: 1,
+          ...avail,
+          ...origin
+        }
+      },
+      {
+        component: 'sensor',
+        objectId: 'rssi',
+        payload: {
+          unique_id: 'ttlock_' + id + '_rssi',
+          name: name + ' RSSI',
+          device: device,
+          device_class: 'signal_strength',
+          state_class: 'measurement',
+          entity_category: 'diagnostic',
+          unit_of_measurement: 'dBm',
+          icon: 'mdi:signal',
+          state_topic: stateTopic(id),
+          value_template: '{{ value_json.rssi }}',
+          qos: 1,
+          ...avail,
+          ...origin
+        }
+      },
+      {
+        component: 'sensor',
+        objectId: 'last_operation',
+        payload: {
+          unique_id: 'ttlock_' + id + '_last_operation',
+          name: name + ' Last operation',
+          device: device,
+          icon: 'mdi:history',
+          state_topic: lastOperationTopic(id),
+          value_template: '{{ value_json.event }}',
+          json_attributes_topic: lastOperationTopic(id),
+          qos: 1,
+          ...avail,
+          ...origin
+        }
+      },
+      {
+        component: 'sensor',
+        objectId: 'last_access',
+        payload: {
+          unique_id: 'ttlock_' + id + '_last_access',
+          name: name + ' Last access',
+          device: device,
+          icon: 'mdi:account-key',
+          state_topic: lastUnlockTopic(id),
+          value_template: '{{ value_json.event }}',
+          json_attributes_topic: lastUnlockTopic(id),
+          qos: 1,
+          ...avail,
+          ...origin
+        }
+      },
+      {
+        component: 'sensor',
+        objectId: 'door_sensor_fault',
+        payload: {
+          unique_id: 'ttlock_' + id + '_door_sensor_fault',
+          name: name + ' Door sensor faults',
+          device: device,
+          entity_category: 'diagnostic',
+          state_class: 'measurement',
+          icon: 'mdi:door-open',
+          state_topic: doorSensorFaultTopic(id),
+          value_template: '{{ value_json.count }}',
+          json_attributes_topic: doorSensorFaultTopic(id),
+          qos: 1,
+          ...avail,
+          ...origin
+        }
+      },
+      {
+        component: 'event',
+        objectId: 'operation',
+        payload: {
+          unique_id: 'ttlock_' + id + '_operation',
+          name: name + ' Operation',
+          device: device,
+          icon: 'mdi:gesture-tap',
+          state_topic: operationEventTopic(id),
+          event_types: OPERATION_EVENT_TYPES,
+          // NI value_template NI json_attributes_topic ici. La plateforme `event` de HA
+          // exige que le payload reste un objet JSON portant `event_type` ; un template
+          // qui le réduit à la chaîne nue ('lock') le fait rejeter — l'entité restait
+          // bloquée sur `unknown` et HA journalisait « No valid JSON event payload
+          // detected » à chaque opération. Le payload de buildOperationEventPayload est
+          // déjà au bon format, et HA promeut lui-même les autres clés en attributs.
+          qos: 1,
+          ...avail,
+          ...origin
+        }
+      },
+      {
+        component: 'binary_sensor',
+        objectId: 'connectivity',
+        payload: {
+          unique_id: 'ttlock_' + id + '_connectivity',
+          name: name + ' Connectivity',
+          device: device,
+          device_class: 'connectivity',
+          entity_category: 'diagnostic',
+          state_topic: lockAvailabilityTopic(id),
+          payload_on: PAYLOAD_ONLINE,
+          payload_off: PAYLOAD_OFFLINE,
+          qos: 1,
+          // Depends on the bridge only so it stays visible/historised even
+          // when the lock itself is offline.
+          availability: [{ topic: BRIDGE_AVAILABILITY_TOPIC, payload_available: PAYLOAD_ONLINE, payload_not_available: PAYLOAD_OFFLINE }],
+          ...origin
+        }
+      }
+    ];
+
+    try {
+      for (const entity of entities) {
+        await this._publish(discoveryConfigTopic(this.discovery_prefix, entity.component, id, entity.objectId), entity.payload, { retain: true, qos: 1 });
+      }
+      // Purge des entités retirées : la découverte MQTT est retained, donc sans payload
+      // vide sur leur topic de config HA garderait les orphelines à vie. Idempotent —
+      // chaque (re)configuration nettoie une installation héritée.
+      for (const [component, objectId] of REMOVED_DISCOVERY_OBJECT_IDS) {
+        await this._publish(discoveryConfigTopic(this.discovery_prefix, component, id, objectId), '', { retain: true, qos: 1 });
+      }
+      this.configuredLocks.set(address, name);
+    } catch (error) {
+      console.error('MQTT configureLock error:', error.message);
+    }
+  }
+
+  /**
+   * Publish a payload. Objects are JSON-encoded; strings are sent as-is
+   * (availability / retained-message purges).
+   * @param {string} topic
+   * @param {object|string} payload
+   * @param {{retain?: boolean, qos?: number}} [options]
+   */
+  async _publish(topic, payload, { retain = true, qos = 0 } = {}) {
+    const data = typeof payload === 'string' ? payload : JSON.stringify(payload);
+    if (process.env.MQTT_DEBUG == '1') {
+      console.log('MQTT Publish', topic, data);
+    }
+    await this.client.publish(topic, data, { retain, qos });
+  }
+
+  /**
+   * Update the readings of a lock in HA
+   * @param {import('ttlock-sdk-js').TTLock} lock
+   */
+  async updateLockState(lock) {
+    if (!this.connected) return;
+    try {
+      const id = lockIdFromAddress(lock.getAddress());
+      // Champ en cache, jamais getLockStatus() : cet accesseur lance une vraie commande BLE
+      // tant que statusUnverified est vrai, et ce handler n'est pas attendu par le manager.
+      // Émis depuis 'lockConnected' pendant un connect(true) (skipDataRead → statusUnverified
+      // reste vrai), il entrait en collision avec la lecture du journal d'opérations sur la
+      // même session GATT (« Command already in progress » / « Unprocessed responses »).
+      // Rien n'est perdu : le manager confirme l'état (getLockStatus(true), awaité) avant
+      // chaque lockLock/lockUnlock/lockStateUpdated — même raisonnement que api/Lock.js.
+      const lockedStatus = lock.lockedStatus;
+      const statePayload = {
+        battery: lock.getBattery(),
+        rssi: lock.getRssi()
+      };
+      // statusUnverified : le cache vient du bit isUnlock de l'advertisement, non probant
+      // (ex. refermeture par le capteur de porte). On ne publie pas un état potentiellement
+      // périmé — l'état confirmé arrivera par l'évènement émis après la vérification.
+      // Sinon on reprend le dernier état VÉRIFIÉ : le message est retained, et un payload sans
+      // `state` écraserait l'état confirmé — après un redémarrage de HA la serrure resterait
+      // `unknown` jusqu'à la prochaine opération. Ce n'est pas l'état non probant du cache,
+      // c'est celui que HA affiche déjà.
+      const address = lock.getAddress();
+      if (lockedStatus != LockedStatus.UNKNOWN && !lock.statusUnverified) {
+        statePayload.state = lockedStatus == LockedStatus.LOCKED ? 'LOCK' : 'UNLOCK';
+        this.lastVerifiedState.set(address, statePayload.state);
+      } else if (this.lastVerifiedState.has(address)) {
+        statePayload.state = this.lastVerifiedState.get(address);
+      }
+      await this._publish(stateTopic(id), statePayload, { retain: true, qos: 1 });
+    } catch (error) {
+      console.error('MQTT updateLockState error:', error.message);
+    }
+  }
+
+  /**
+   * Publish per-lock availability ('online' / 'offline').
+   * @param {import('ttlock-sdk-js').TTLock} lock
+   * @param {boolean} online
+   */
+  async publishLockAvailability(lock, online) {
+    if (!this.connected) return;
+    try {
+      const id = lockIdFromAddress(lock.getAddress());
+      await this._publish(lockAvailabilityTopic(id), online ? PAYLOAD_ONLINE : PAYLOAD_OFFLINE, {
+        retain: true,
+        qos: 1
+      });
+    } catch (error) {
+      console.error('MQTT publishLockAvailability error:', error.message);
+    }
+  }
+
+  /**
+   * Publish the most recent operation-log entry (who locked/unlocked, when).
+   * Reads the persisted log only — no BLE.
+   * @param {import('ttlock-sdk-js').TTLock} lock
+   * @param {boolean} [force] republish even if the recordNumber was already published
+   */
+  async publishLastOperation(lock, force = false) {
+    if (!this.connected) return;
+    try {
+      const address = lock.getAddress();
+      const ops = manager.getPersistedOperationLog(address);
+      const last = latestOperation(ops);
+      if (!last) return;
+      // Déduplication : skip si le recordNumber n'a pas changé depuis la dernière
+      // publication. Le seuil est PERSISTÉ (deviceInfoData) et non plus gardé en
+      // mémoire, pour ne pas republier — et donc re-déclencher des automations HA —
+      // à chaque redémarrage de l'addon (les messages retained suffisent).
+      const lastRecord = last.recordNumber ?? null;
+      if (!force && store.getLastPublishedRecord(address, 'op') === lastRecord) return;
+      const id = lockIdFromAddress(address);
+      await this._publish(lastOperationTopic(id), buildLastOperationPayload(last), {
+        retain: true,
+        qos: 1
+      });
+      store.setLastPublishedRecord(address, 'op', lastRecord);
+    } catch (error) {
+      console.error('MQTT publishLastOperation error:', error.message);
+    }
+  }
+
+  /**
+   * Publish the most recent *credential* unlock (carte IC / code / empreinte …)
+   * for the "last access" sensor. Unlike publishLastOperation this skips the
+   * auto-lock / door-sensor records that would otherwise mask the method.
+   * Reads the persisted log only — no BLE.
+   * @param {import('ttlock-sdk-js').TTLock} lock
+   * @param {boolean} [force] republish even if the recordNumber was already published
+   */
+  async publishLastUnlock(lock, force = false) {
+    if (!this.connected) return;
+    try {
+      const address = lock.getAddress();
+      const ops = manager.getPersistedOperationLog(address);
+      const last = latestUnlock(ops);
+      if (!last) return;
+      // Déduplication : même logique (persistée) que publishLastOperation.
+      const lastRecord = last.recordNumber ?? null;
+      if (!force && store.getLastPublishedRecord(address, 'unlock') === lastRecord) return;
+      const id = lockIdFromAddress(address);
+      await this._publish(lastUnlockTopic(id), buildLastOperationPayload(last), {
+        retain: true,
+        qos: 1
+      });
+      store.setLastPublishedRecord(address, 'unlock', lastRecord);
+    } catch (error) {
+      console.error('MQTT publishLastUnlock error:', error.message);
+    }
+  }
+
+  /**
+   * Re-publish bridge availability and every known lock's discovery + state
+   * after a (re)connection — retained messages alone are not enough if the
+   * broker restarted.
+   */
+  async _republishAll() {
+    await this._publish(BRIDGE_AVAILABILITY_TOPIC, PAYLOAD_ONLINE, { retain: true, qos: 1 });
+    // Toutes les serrures appairées, pas seulement configuredLocks : un lockPaired/lockConnected
+    // émis avant la connexion MQTT est sorti de configureLock sur `!this.connected`, sans
+    // enregistrer la serrure — elle ne serait jamais republiée avant le prochain évènement BLE.
+    for (const lock of manager.pairedLocks?.values?.() ?? []) {
+      try {
+        await this.configureLock(lock, true);
+        await this.publishLockAvailability(lock, true);
+        await this.updateLockState(lock);
+        // force : le broker a pu perdre ses messages retained, la déduplication par
+        // recordNumber laisserait alors last_operation/last_access vides.
+        await this.publishLastOperation(lock, true);
+        await this.publishLastUnlock(lock, true);
+        await this._replayMissedEvents(lock);
+      } catch (error) {
+        console.error('MQTT republish error:', error.message);
+      }
+    }
+  }
+
+  /**
+   * Publish the door-sensor fault diagnostic (count over the persisted log window).
+   * Reads the persisted log only — no BLE.
+   * @param {import('ttlock-sdk-js').TTLock} lock
+   */
+  async publishDoorSensorFaults(lock) {
+    if (!this.connected) return;
+    try {
+      const address = lock.getAddress();
+      const id = lockIdFromAddress(address);
+      const payload = buildDoorSensorFaultPayload(manager.getPersistedOperationLog(address));
+      // Pas de déduplication par recordNumber ici, contrairement à publishLastOperation :
+      // `count` bouge aussi quand le journal circulaire fait sortir une ancienne anomalie
+      // par le bas, sans qu'aucun nouveau record n'apparaisse. Publication retained à chaque
+      // rafraîchissement — charge négligeable, et le broker écrase la valeur précédente.
+      await this._publish(doorSensorFaultTopic(id), payload, { retain: true, qos: 1 });
+    } catch (error) {
+      console.error('MQTT publishDoorSensorFaults error:', error.message);
+    }
+  }
+
+  /**
+   * Publish availability + state + last operation for a lock.
+   * @param {import('ttlock-sdk-js').TTLock} lock
+   */
+  async _refreshLock(lock) {
+    await this.publishLockAvailability(lock, true);
+    await this.updateLockState(lock);
+    await this.publishLastOperation(lock);
+    await this.publishLastUnlock(lock);
+    await this.publishDoorSensorFaults(lock);
+  }
+
+  /**
+   *
+   * @param {import('ttlock-sdk-js').TTLock} lock
+   */
+  async _onLockPaired(lock) {
+    await this.configureLock(lock);
+    await this._refreshLock(lock);
+  }
+
+  /**
+   *
+   * @param {import('ttlock-sdk-js').TTLock} lock
+   */
+  async _onLockConnected(lock) {
+    await this.configureLock(lock);
+    await this._refreshLock(lock);
+  }
+
+  /**
+   *
+   * @param {import('ttlock-sdk-js').TTLock} lock
+   */
+  async _onLockUnlock(lock) {
+    await this._refreshLock(lock);
+  }
+
+  /**
+   *
+   * @param {import('ttlock-sdk-js').TTLock} lock
+   */
+  async _onLockLock(lock) {
+    await this._refreshLock(lock);
+  }
+
+  /**
+   * Mise à jour rapide de l'état de la serrure (battery/rssi/state) depuis le cache BLE,
+   * émise par _handleLockedStatusUpdate avant que la connexion BLE soit établie pour lire
+   * le journal opérationnel. Ne publie PAS last_operation ni last_access (données pas encore
+   * disponibles à cet instant — elles seront publiées par _onLockUnlock/_onLockLock après
+   * la lecture complète du log via _processOperationLog).
+   * @param {import('ttlock-sdk-js').TTLock} lock
+   */
+  async _onLockStateUpdated(lock) {
+    await this.updateLockState(lock);
+  }
+
+  /**
+   * @param {import('ttlock-sdk-js').TTLock} lock
+   */
+  async _onLockBatteryUpdated(lock) {
+    await this.configureLock(lock); // no-op unless alias changed since last discovery publish
+    await this._refreshLock(lock);
+  }
+
+  /**
+   * Remove a lock's MQTT discovery entries when it is unpaired
+   * @param {import('ttlock-sdk-js').TTLock} lock
+   */
+  async _onLockUnpaired(lock) {
+    if (!this.connected) return;
+    try {
+      const id = lockIdFromAddress(lock.getAddress());
+      const discoveryTopics = [
+        discoveryConfigTopic(this.discovery_prefix, 'lock', id, 'lock'),
+        discoveryConfigTopic(this.discovery_prefix, 'sensor', id, 'battery'),
+        discoveryConfigTopic(this.discovery_prefix, 'sensor', id, 'rssi'),
+        discoveryConfigTopic(this.discovery_prefix, 'sensor', id, 'last_operation'),
+        discoveryConfigTopic(this.discovery_prefix, 'sensor', id, 'last_access'),
+        discoveryConfigTopic(this.discovery_prefix, 'sensor', id, 'door_sensor_fault'),
+        discoveryConfigTopic(this.discovery_prefix, 'event', id, 'operation'),
+        discoveryConfigTopic(this.discovery_prefix, 'binary_sensor', id, 'connectivity'),
+        // Entités retirées en 2.6.7 : toujours purgées au dépairage pour nettoyer les
+        // installations antérieures (source de vérité unique dans mqttTopics.js).
+        ...REMOVED_DISCOVERY_OBJECT_IDS.map(([component, objectId]) =>
+          discoveryConfigTopic(this.discovery_prefix, component, id, objectId))
+      ];
+      for (const topic of discoveryTopics) {
+        if (process.env.MQTT_DEBUG == '1') {
+          console.log('MQTT Remove discovery', topic);
+        }
+        await this._publish(topic, '', { retain: true, qos: 1 });
+      }
+      // Purge retained data topics so a re-pair starts clean. (operationEventTopic is
+      // published non-retained, so nothing lingers there — no need to purge it.)
+      for (const topic of [stateTopic(id), lockAvailabilityTopic(id), lastOperationTopic(id), lastUnlockTopic(id), doorSensorFaultTopic(id)]) {
+        await this._publish(topic, '', { retain: true, qos: 1 });
+      }
+      this.configuredLocks.delete(lock.getAddress());
+      this.lastVerifiedState.delete(lock.getAddress());
+      store.clearPublishedRecords(lock.getAddress());
+    } catch (error) {
+      console.error('MQTT _onLockUnpaired error:', error.message);
+    }
+  }
+
+  /**
+   * A lock stopped responding to BLE advertisements/connects for longer than the
+   * configured timeout (manager's reachability watchdog) — flip its per-lock
+   * availability topic to 'offline' so hybrid-availability entities go unavailable
+   * instead of showing stale battery/rssi/state values forever.
+   * @param {import('ttlock-sdk-js').TTLock} lock
+   */
+  async _onLockOffline(lock) {
+    await this.publishLockAvailability(lock, false);
+  }
+
+  /**
+   * A previously-offline lock answered a BLE advertisement/connect again.
+   * @param {import('ttlock-sdk-js').TTLock} lock
+   */
+  async _onLockOnline(lock) {
+    await this.publishLockAvailability(lock, true);
+  }
+
+  /**
+   * Publish one operation as a transient HA `event` and persist the
+   * `lastPublishedEvent` threshold on success. Shared by `_onLockOperation` (live,
+   * one call per new record) and `_replayMissedEvents` (catch-up on reconnect).
+   * @param {import('ttlock-sdk-js').TTLock} lock
+   * @param {object} op enriched operation (recordTypeCategory / recordTypeName set)
+   */
+  async _publishOperationEvent(lock, op) {
+    const address = lock.getAddress();
+    const id = lockIdFromAddress(address);
+    // NON-retained: an event is a point-in-time trigger, not a state to restore.
+    await this._publish(operationEventTopic(id), buildOperationEventPayload(op), {
+      retain: false,
+      qos: 1
+    });
+    store.setLastPublishedEvent(address, { recordNumber: op.recordNumber, operateDate: op.operateDate });
+  }
+
+  /**
+   * A new operation was read from a lock's log (manager emits one `lockOperation`
+   * per new record, in chronological order). Publish it as a transient HA `event`
+   * so automations can react per operation and HA keeps a history — unlike the
+   * retained last_operation/last_access sensors which only expose the latest state.
+   * @param {import('ttlock-sdk-js').TTLock} lock
+   * @param {object} op enriched operation (recordTypeCategory / recordTypeName set)
+   */
+  async _onLockOperation(lock, op) {
+    if (!this.connected || !op) return;
+    try {
+      await this._publishOperationEvent(lock, op);
+    } catch (error) {
+      console.error('MQTT _onLockOperation error:', error.message);
+    }
+  }
+
+  /**
+   * Catch up on transient `operation` events that couldn't be published while MQTT
+   * was disconnected. `manager._processOperationLog` advances `lastProcessedRecord`/
+   * `lastProcessedDate` regardless of MQTT connectivity (other consumers, like the
+   * WebSocket UI, must keep working without MQTT), so an operation processed during
+   * an MQTT outage is never treated as "new" again — without this replay it would be
+   * silently dropped forever, which matters most for the ALARM category. Reads the
+   * persisted log only (no BLE) and is called once per (re)connect, from
+   * `_republishAll` — NOT from `_refreshLock`, which fires on every lock/unlock and
+   * is not a reconnect signal.
+   * @param {import('ttlock-sdk-js').TTLock} lock
+   */
+  async _replayMissedEvents(lock) {
+    if (!this.connected) return;
+    try {
+      const address = lock.getAddress();
+      let threshold = store.getLastPublishedEvent(address);
+      if (!threshold) {
+        // First run of this feature (fresh pair, or upgrade from a version that didn't
+        // track it) — same rule as the automatic path's "AMORÇAGE" resync: adopt the
+        // already-processed anchor as the baseline instead of replaying the entire
+        // persisted history as events, which would retroactively flood HA automations.
+        threshold = { recordNumber: store.getLastProcessedRecord(address), operateDate: store.getLastProcessedDate(address) };
+        store.setLastPublishedEvent(address, threshold);
+        return;
+      }
+      const ops = manager
+        .getPersistedOperationLog(address)
+        .filter((op) => isNewerOperation(op, threshold))
+        .sort((a, b) => (a.operateDate || 0) - (b.operateDate || 0) || (a.recordNumber || 0) - (b.recordNumber || 0));
+      for (const op of ops) {
+        await this._publishOperationEvent(lock, op);
+      }
+    } catch (error) {
+      console.error('MQTT _replayMissedEvents error:', error.message);
+    }
+  }
+
+  /**
+   *
+   * @param {string} topic
+   * @param {Buffer} message
+   */
+  _onMQTTMessage(topic, message) {
+    /**
+     * Topic: ttlock/e1581b3a605e/set
+       Message: UNLOCK
+     */
+    const parsed = parseCommandTopic(topic);
+    if (parsed) {
+      const command = message.toString('utf8');
+      if (process.env.MQTT_DEBUG == '1') {
+        console.log('MQTT command:', parsed.address, command);
+      }
+      // Promesses non attendues (handler d'EventEmitter) : sans .catch(), un rejet de
+      // _connectLock & co devient une unhandledRejection, fatale depuis Node 15.
+      switch (command) {
+        case 'LOCK':
+          manager.lockLock(parsed.address).catch((e) => console.error('MQTT LOCK command error:', e.message));
+          break;
+        case 'UNLOCK':
+          manager.unlockLock(parsed.address).catch((e) => console.error('MQTT UNLOCK command error:', e.message));
+          break;
+      }
+    } else if (process.env.MQTT_DEBUG == '1') {
+      console.log('Topic:', topic);
+      console.log('Message:', message.toString('utf8'));
+    }
+  }
+}
+
+export default HomeAssistant;
