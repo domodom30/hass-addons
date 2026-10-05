@@ -156,9 +156,10 @@ test('buildLastOperationPayload', () => {
   });
 });
 
-test('buildLastOperationPayload falls back to password then null', () => {
+test('buildLastOperationPayload never exposes the raw password, falls back to null', () => {
+  // `password` = code PIN clavier ou numéro de carte : jamais publié en clair.
   const noName = buildLastOperationPayload({ password: '999', recordType: 1 });
-  assert.equal(noName.by, '999');
+  assert.equal(noName.by, null);
   const nothing = buildLastOperationPayload({ recordType: 1 });
   assert.equal(nothing.by, null);
   assert.equal(nothing.event, null);
