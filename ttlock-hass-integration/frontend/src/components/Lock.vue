@@ -30,47 +30,18 @@
           <v-icon :key="stateIcon" :icon="stateIcon" :color="stateColor" size="36" />
         </transition>
       </div>
-      <div class="d-flex align-center ga-1 flex-wrap justify-center">
-        <v-chip
-          v-if="typeof lock.battery === 'number' && lock.battery >= 0"
-          size="x-small"
-          :color="batteryColor"
-          variant="tonal"
-        >
-          <v-icon start size="14" :icon="batteryIcon" />
-          {{ lock.battery }}%
-        </v-chip>
-        <v-chip
-          v-if="typeof lock.rssi === 'number'"
-          size="x-small"
-          :color="rssiColor"
-          variant="tonal"
-        >
-          <v-icon start size="14" :icon="rssiIcon" />
-          {{ lock.rssi }}dB
-        </v-chip>
-        <v-chip
-          v-if="lock.hasAutoLock && lock.autoLockTime >= 0"
-          size="x-small"
-          variant="tonal"
-          color="secondary"
-          prepend-icon="mdi-lock-clock"
-        >
-          {{
-            lock.autoLockTime > 0
-              ? lock.autoLockTime + "s"
-              : $t("lock.autoLockOff")
-          }}
-        </v-chip>
-        <v-chip
-          v-if="lock.hasAudio && lock.audio !== undefined"
-          size="x-small"
-          variant="tonal"
-          :color="lock.audio ? 'success' : 'secondary'"
-          :prepend-icon="lock.audio ? 'mdi-volume-high' : 'mdi-volume-off'"
-        >
-          {{ lock.audio ? $t("lock.soundOn") : $t("lock.soundOff") }}
-        </v-chip>
+      <!-- Informations : libellé explicite pour chaque valeur -->
+      <div v-if="stats.length" class="lock-stats w-100">
+        <div v-for="stat in stats" :key="stat.key" class="lock-stat d-flex align-center ga-2">
+          <v-icon size="18" :icon="stat.icon" :color="stat.color" class="flex-shrink-0" />
+          <div class="min-w-0">
+            <div class="text-caption text-medium-emphasis lh-tight text-truncate">{{ stat.label }}</div>
+            <div
+              class="text-body-2 font-weight-medium lh-tight text-truncate"
+              :class="stat.color ? `text-${stat.color}` : ''"
+            >{{ stat.value }}</div>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -282,11 +253,55 @@ export default {
       if (this.lock.locked === 1) return "mdi-lock-open-variant";
       return "mdi-help-circle-outline";
     },
+    // Verrouillé = état sûr (vert), déverrouillé = attention (orange).
     stateColor() {
       if (this.canPair) return "secondary";
-      if (this.lock.locked === 0) return "error";
-      if (this.lock.locked === 1) return "success";
+      if (this.lock.locked === 0) return "success";
+      if (this.lock.locked === 1) return "warning";
       return "secondary";
+    },
+    stats() {
+      const stats = [];
+      if (typeof this.lock.battery === "number" && this.lock.battery >= 0) {
+        stats.push({
+          key: "battery",
+          icon: this.batteryIcon,
+          color: this.batteryColor,
+          label: this.$t("lock.battery"),
+          value: `${this.lock.battery} %`,
+        });
+      }
+      if (typeof this.lock.rssi === "number") {
+        stats.push({
+          key: "rssi",
+          icon: this.rssiIcon,
+          color: this.rssiColor,
+          label: this.$t("lock.signal"),
+          value: `${this.lock.rssi} dBm`,
+        });
+      }
+      if (this.lock.hasAutoLock && this.lock.autoLockTime >= 0) {
+        stats.push({
+          key: "autolock",
+          icon: "mdi-lock-clock",
+          color: null,
+          label: this.$t("lock.autoLockTime"),
+          value:
+            this.lock.autoLockTime > 0
+              ? `${this.lock.autoLockTime} s`
+              : this.$t("lock.autoLockOff"),
+        });
+      }
+      if (this.lock.hasAudio && this.lock.audio !== undefined) {
+        stats.push({
+          key: "audio",
+          icon: this.lock.audio ? "mdi-volume-high" : "mdi-volume-off",
+          color: null,
+          label: this.$t("lock.sound"),
+          value: this.lock.audio ? this.$t("lock.soundOn") : this.$t("lock.soundOff"),
+        });
+      }
+      return stats;
     },
     stateLabel() {
       if (this.canPair) return this.$t("lock.unknown");
@@ -370,8 +385,24 @@ export default {
 .bg-success-tonal {
   background: rgba(var(--v-theme-success), 0.12);
 }
-.bg-error-tonal {
-  background: rgba(var(--v-theme-error), 0.12);
+.bg-warning-tonal {
+  background: rgba(var(--v-theme-warning), 0.12);
+}
+.lock-stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 12px;
+}
+.lock-stat {
+  padding: 6px 10px;
+  border-radius: 10px;
+  background: rgba(var(--v-theme-on-surface), 0.04);
+}
+.lh-tight {
+  line-height: 1.25;
+}
+.min-w-0 {
+  min-width: 0;
 }
 .bg-secondary-tonal {
   background: rgba(var(--v-theme-secondary), 0.12);

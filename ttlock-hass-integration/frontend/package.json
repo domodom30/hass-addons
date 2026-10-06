@@ -1,6 +1,6 @@
 {
   "name": "ttlock-hass-integration-frontend",
-  "version": "2.8.5",
+  "version": "3.1.0",
   "type": "module",
   "author": "Domodom30 <domodom30@gmail.com>",
   "scripts": {
@@ -11,16 +11,16 @@
     "deploy": "npm run build && rm -rf ../addon/frontend/* && cp -r ./dist/* ../addon/frontend/"
   },
   "dependencies": {
+    "@mdi/font": "^7.0.0",
     "core-js": "^3.6.5",
+    "json-editor-vue": "^0.10.0",
     "moment": "^2.29.1",
     "reconnecting-websocket": "^4.4.0",
     "vue": "^3.4.0",
     "vue-i18n": "^9.0.0",
     "vue-router": "^4.0.0",
     "vuetify": "^3.0.0",
-    "vuex": "^4.0.0",
-    "json-editor-vue": "^0.10.0",
-    "@mdi/font": "^7.0.0"
+    "vuex": "^4.0.0"
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "^5.0.0",

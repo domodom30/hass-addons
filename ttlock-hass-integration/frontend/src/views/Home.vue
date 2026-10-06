@@ -1,21 +1,14 @@
 <template>
   <div>
-
-    <div class="d-flex flex-wrap align-end justify-space-between mb-4 ga-3">
-    </div>
-
-    <v-row v-if="!locksLoaded" align="start">
-      <v-col cols="12" md="8" lg="9">
-        <v-row>
-          <v-col v-for="n in 3" :key="n" cols="12" sm="6" lg="4">
-            <v-skeleton-loader type="card" />
-          </v-col>
-        </v-row>
-      </v-col>
-      <v-col cols="12" md="4" lg="3">
-        <v-skeleton-loader type="list-item-two-line@3" />
-      </v-col>
-    </v-row>
+    <!-- Chargement : même disposition que la page (serrures, puis activité) -->
+    <template v-if="!locksLoaded">
+      <v-row>
+        <v-col v-for="n in 3" :key="n" cols="12" sm="6" lg="4">
+          <v-skeleton-loader type="card" />
+        </v-col>
+      </v-row>
+      <v-skeleton-loader type="list-item-two-line@4" class="mt-8" />
+    </template>
 
     <v-card v-else-if="totalLocks === 0" class="pa-8 text-center">
       <v-avatar size="64" color="primary" variant="tonal" class="mb-4">
@@ -35,88 +28,115 @@
       </v-btn>
     </v-card>
 
-    <v-row v-else align="start">
-
-      <v-col cols="12" :order="2" :order-md="1" md="8" lg="9">
-        <div class="d-flex align-end justify-space-between mb-4">
-          <div>
-            <h2 class="text-subtitle-1 font-weight-bold">{{ $t('dashboard.yourLocks') }}</h2>
-            <div class="text-caption text-medium-emphasis">{{ $t('dashboard.yourLocksHint') }}</div>
-          </div>
+    <template v-else>
+      <!-- Serrures : pleine largeur, toujours en premier (y compris sur mobile) -->
+      <section>
+        <div class="mb-4">
+          <h2 class="text-subtitle-1 font-weight-bold">{{ $t('dashboard.yourLocks') }}</h2>
+          <div class="text-caption text-medium-emphasis">{{ $t('dashboard.yourLocksHint') }}</div>
         </div>
         <v-row>
           <v-col v-for="lock in locks" :key="lock.address" cols="12" sm="6" lg="4">
             <Lock :lock="lock" />
           </v-col>
         </v-row>
-      </v-col>
+      </section>
 
-      <v-col cols="12" :order="1" :order-md="2" md="4" lg="3">
-        <v-card class="pa-4">
-          <div class="d-flex align-center justify-space-between mb-3">
-            <span class="text-caption text-medium-emphasis text-uppercase font-weight-medium">
-              {{ $t('dashboard.recentActivity') }}
-            </span>
-            <div class="d-flex align-center ga-1">
-              <v-avatar size="28" color="info" variant="tonal">
-                <v-icon size="16">mdi-clock-time-four-outline</v-icon>
-              </v-avatar>
-              <v-btn
-                variant="text"
-                size="x-small"
-                color="primary"
-                @click="openGlobalActivity"
-              >{{ $t('dashboard.viewAll') }}</v-btn>
-            </div>
-          </div>
-
-          <div v-if="lastFiveActions.length === 0" class="d-flex flex-column align-center text-center py-6">
-            <v-icon size="28" color="medium-emphasis" class="mb-2">mdi-history</v-icon>
-            <span class="text-caption text-medium-emphasis">{{ $t('dashboard.noActivity') }}</span>
-          </div>
-
-          <template v-for="(op, i) in lastFiveActions" :key="i">
-            <v-divider v-if="i > 0" class="my-2" />
+      <!-- Activité récente : ligne dédiée, pleine largeur -->
+      <section class="mt-8">
+        <v-card>
+          <div class="d-flex align-center justify-space-between ga-2 px-4 py-3">
             <div class="d-flex align-center ga-2">
-              <v-icon
-                size="18"
-                :color="opColor(op)"
-                :icon="opIcon(op)"
-                class="flex-shrink-0"
-              />
-              <div class="min-w-0" style="flex: 1">
-                <v-tooltip :text="opLabel(op)" location="top">
-                  <template #activator="{ props }">
-                    <div v-bind="props" class="text-caption font-weight-medium text-truncate">
-                      {{ opLabel(op) }}
-                    </div>
-                  </template>
-                </v-tooltip>
-                <div class="text-caption text-medium-emphasis d-flex align-center justify-space-between ga-1">
-                  <v-tooltip :text="opRelativeTime(op)" location="top">
-                    <template #activator="{ props }">
-                      <span v-bind="props">{{ opDateTime(op) }}</span>
-                    </template>
-                  </v-tooltip>
-                  <span v-if="op.lockName" class="text-truncate" style="max-width: 80px; opacity: 0.7">{{ op.lockName }}</span>
+              <v-avatar size="28" color="info" variant="tonal">
+                <v-icon size="16">mdi-history</v-icon>
+              </v-avatar>
+              <h2 class="text-subtitle-1 font-weight-bold">{{ $t('dashboard.recentActivity') }}</h2>
+            </div>
+            <v-btn
+              variant="text"
+              size="small"
+              color="primary"
+              append-icon="mdi-chevron-right"
+              @click="openGlobalActivity"
+            >{{ $t('dashboard.viewAll') }}</v-btn>
+          </div>
+          <v-divider />
+
+          <div v-if="recentRows.length === 0" class="d-flex flex-column align-center text-center py-8">
+            <v-icon size="28" color="medium-emphasis" class="mb-2">mdi-history</v-icon>
+            <span class="text-body-2 text-medium-emphasis">{{ $t('dashboard.noActivity') }}</span>
+          </div>
+
+          <template v-else>
+            <template v-if="mdAndUp">
+              <div class="activity-grid activity-head px-4 py-2 text-caption text-medium-emphasis text-uppercase font-weight-medium">
+                <span>{{ $t('dashboard.activity.event') }}</span>
+                <span>{{ $t('dashboard.activity.lock') }}</span>
+                <span>{{ $t('dashboard.activity.credential') }}</span>
+                <span class="text-end">{{ $t('dashboard.activity.when') }}</span>
+              </div>
+              <v-divider />
+            </template>
+
+            <div v-for="(row, i) in recentRows" :key="row.key">
+              <v-divider v-if="i > 0" />
+
+              <!-- Ordinateur / tablette : colonnes -->
+              <div v-if="mdAndUp" class="activity-grid align-center px-4 py-3">
+                <div class="d-flex align-center ga-3 min-w-0">
+                  <v-avatar size="32" :color="row.color" variant="tonal" class="flex-shrink-0">
+                    <v-icon size="18" :icon="row.icon" />
+                  </v-avatar>
+                  <span class="text-body-2 font-weight-medium text-truncate">{{ row.label }}</span>
+                </div>
+                <span class="text-body-2 text-truncate">{{ row.lockName }}</span>
+                <span class="text-body-2 text-truncate" :class="{ 'text-medium-emphasis': !row.credential }">
+                  {{ row.credential || '—' }}
+                </span>
+                <div class="text-end">
+                  <div class="text-body-2">{{ row.relative }}</div>
+                  <div class="text-caption text-medium-emphasis">{{ row.date }}</div>
+                </div>
+              </div>
+
+              <!-- Mobile : empilé -->
+              <div v-else class="d-flex align-center ga-3 px-4 py-3">
+                <v-avatar size="32" :color="row.color" variant="tonal" class="flex-shrink-0">
+                  <v-icon size="18" :icon="row.icon" />
+                </v-avatar>
+                <div class="min-w-0 flex-grow-1">
+                  <div class="text-body-2 font-weight-medium">{{ row.label }}</div>
+                  <div class="text-caption text-medium-emphasis">
+                    {{ [row.lockName, row.credential].filter(Boolean).join(' · ') }}
+                  </div>
+                </div>
+                <div class="text-end flex-shrink-0">
+                  <div class="text-caption">{{ row.relative }}</div>
+                  <div class="text-caption text-medium-emphasis">{{ row.date }}</div>
                 </div>
               </div>
             </div>
           </template>
         </v-card>
-      </v-col>
-
-    </v-row>
+      </section>
+    </template>
   </div>
 </template>
 
 <script>
-import moment from "moment"
+import { useDisplay } from "vuetify"
 import Lock from "@/components/Lock.vue"
+import { operationMeta, operationMoment } from "@/utils/operations"
+
+const RECENT_COUNT = 8
 
 export default {
   name: "Home",
   components: { Lock },
+  setup() {
+    const { mdAndUp } = useDisplay()
+    return { mdAndUp }
+  },
   computed: {
     locks() {
       return this.$store.state.locks
@@ -124,23 +144,20 @@ export default {
     pairedLocks() {
       return this.$store.state.locks.filter(l => l.paired)
     },
-    isScanning() {
-      return this.$store.state.scanStatus == 1
-    },
     totalLocks() {
       return this.locks.length
     },
     locksLoaded() {
       return this.$store.state.locksLoaded
     },
-    lastFiveActions() {
+    recentActions() {
       const all = []
       const ops = this.$store.state.operations
       for (const addr in ops) {
         const lock = this.$store.state.locks.find(l => l.address === addr)
         const lockName = lock?.name || addr
         for (const op of ops[addr] || []) {
-          if (op.operateDate) all.push({ ...op, lockName })
+          if (op.operateDate) all.push({ ...op, lockName, lockAddress: addr })
         }
       }
       return all
@@ -151,7 +168,25 @@ export default {
           if (a.recordNumber < b.recordNumber) return 1
           return 0
         })
-        .slice(0, 5)
+        .slice(0, RECENT_COUNT)
+    },
+    recentRows() {
+      return this.recentActions.map(op => {
+        const meta = operationMeta(op.recordTypeCategory)
+        const m = operationMoment(op)
+        return {
+          key: `${op.lockAddress}-${op.recordNumber}-${op.operateDate}`,
+          icon: meta.icon,
+          color: meta.color,
+          label: op.recordTypeName || this.$t(meta.tagKey),
+          lockName: op.lockName,
+          // Alias de l'identifiant uniquement : le code PIN brut (op.password) n'est
+          // jamais affiché sur le tableau de bord.
+          credential: op.passwordName || "",
+          relative: m.isValid() ? m.fromNow() : "—",
+          date: m.isValid() ? m.format("DD/MM/YYYY HH:mm") : "",
+        }
+      })
     },
   },
   created() {
@@ -174,41 +209,23 @@ export default {
     openWizard() {
       this.$store.commit('setOverlay', { overlay: 'addWizard' })
     },
-    startScan() {
-      this.$store.dispatch("scan")
-    },
     openGlobalActivity() {
       this.$store.commit("setOverlay", { overlay: "logs", address: null })
-    },
-    opLabel(op) {
-      return op.recordTypeName || '—'
-    },
-    opIcon(op) {
-      if (op.recordTypeCategory === 'LOCK')   return 'mdi-lock'
-      if (op.recordTypeCategory === 'UNLOCK') return 'mdi-lock-open-variant'
-      if (op.recordTypeCategory === 'ALARM')  return 'mdi-bell-alert'
-      if (op.recordTypeCategory === 'FAILED') return 'mdi-alert-circle'
-      return 'mdi-information-outline'
-    },
-    opColor(op) {
-      if (op.recordTypeCategory === 'LOCK')   return 'error'
-      if (op.recordTypeCategory === 'UNLOCK') return 'success'
-      if (op.recordTypeCategory === 'ALARM')  return 'warning'
-      if (op.recordTypeCategory === 'FAILED') return 'deep-orange'
-      return 'info'
-    },
-    _opMoment(op) {
-      return moment(op.operateDate, "YYYYMMDDHHmmss")
-    },
-    opDateTime(op) {
-      const m = this._opMoment(op)
-      return m.isValid() ? m.format("DD-MM-YYYY HH:mm") : '—'
-    },
-    opRelativeTime(op) {
-      const m = this._opMoment(op)
-      return m.isValid() ? m.fromNow() : '—'
     },
   },
 }
 </script>
 
+<style scoped>
+.activity-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1.4fr) minmax(0, 1.4fr) minmax(0, 1fr);
+  column-gap: 16px;
+}
+.activity-head {
+  letter-spacing: 0.04em;
+}
+.min-w-0 {
+  min-width: 0;
+}
+</style>

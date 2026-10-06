@@ -57,6 +57,12 @@
     "recentActivity": "Recent activity",
     "viewAll": "View all",
     "noActivity": "No activity yet",
+    "activity": {
+      "event": "Event",
+      "lock": "Lock",
+      "credential": "Credential",
+      "when": "When"
+    },
     "yourLocks": "Your locks",
     "yourLocksHint": "Quick access to lock control and credentials",
     "empty": {
@@ -80,11 +86,13 @@
     "connected": "Connected",
     "disconnected": "Disconnected",
     "unknown": "Unknown",
+    "battery": "Battery",
+    "signal": "Signal",
     "autoLockTime": "Auto lock time",
     "autoLockOff": "Disabled",
     "sound": "Sound",
-    "soundOn": "on",
-    "soundOff": "off"
+    "soundOn": "On",
+    "soundOff": "Off"
   },
   "settings": {
     "title": "Settings",

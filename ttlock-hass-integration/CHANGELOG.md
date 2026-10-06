@@ -1,6 +1,20 @@
 # Changelog
 
 
+## [3.1.0] — 2026-10-06
+
+### 🎨 UI / UX
+
+- **Recent activity moved to a full-width row below the locks**: it was a narrow
+  side column with truncated labels, and on mobile it pushed the lock controls
+  down. It now shows the last 8 events with event, lock, credential alias (never
+  the PIN itself) and relative time + date; the locks always come first.
+- **Lock state colours follow security**: locked is green, unlocked is orange.
+  The activity log uses the same colours, with failed attempts and alarms in red.
+- **Readable lock details**: battery, signal (in dBm), auto-lock and sound are
+  shown with explicit labels instead of small chips that only differed by icon.
+
+
 ## [3.0.0] — 2026-10-06
 
 ### 🔒 Security
