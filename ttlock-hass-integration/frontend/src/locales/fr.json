@@ -57,6 +57,12 @@
     "recentActivity": "Activité récente",
     "viewAll": "Voir tout",
     "noActivity": "Aucune activité pour l'instant",
+    "activity": {
+      "event": "Événement",
+      "lock": "Serrure",
+      "credential": "Identifiant",
+      "when": "Quand"
+    },
     "yourLocks": "Vos serrures",
     "yourLocksHint": "Accès rapide aux contrôles et aux identifiants",
     "empty": {
@@ -80,11 +86,13 @@
     "connected": "Connecté",
     "disconnected": "Déconnecté",
     "unknown": "Inconnu",
+    "battery": "Batterie",
+    "signal": "Signal",
     "autoLockTime": "Verrouillage auto",
     "autoLockOff": "Désactivé",
     "sound": "Son",
-    "soundOn": "activé",
-    "soundOff": "désactivé"
+    "soundOn": "Activé",
+    "soundOff": "Désactivé"
   },
   "settings": {
     "title": "Paramètres",

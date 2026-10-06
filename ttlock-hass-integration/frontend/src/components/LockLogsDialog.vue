@@ -158,6 +158,7 @@
 
 <script>
 import moment from "moment"
+import { operationMeta, operationMoment } from "@/utils/operations"
 
 export default {
   name: "LockLogsDialog",
@@ -228,40 +229,20 @@ export default {
       })
     },
     lines() {
-      const KIND_MAP = {
-        UNLOCK: "unlock",
-        LOCK:   "lock",
-        ALARM:  "alarm",
-        FAILED: "failed",
-      }
-      const ICONS = {
-        unlock: { icon: 'mdi-lock-open-variant',   color: 'success' },
-        lock:   { icon: 'mdi-lock',                color: 'error' },
-        alarm:  { icon: 'mdi-bell-alert',          color: 'warning' },
-        failed: { icon: 'mdi-alert-circle',        color: 'warning' },
-        other:  { icon: 'mdi-information-outline', color: 'info' },
-      }
-      const TAG_KEYS = {
-        unlock: 'operations.typeUnlock',
-        lock:   'operations.typeLock',
-        alarm:  'operations.typeAlarm',
-        failed: 'operations.typeFailed',
-        other:  'operations.typeOther',
-      }
       return this.rawOperations
         .filter(op => this.filter === "ALL" || op.recordTypeCategory === this.filter)
         .filter(op => this.inDateRange(op.operateDate))
         .map(op => {
-          const kind = KIND_MAP[op.recordTypeCategory] ?? "other"
-          const m = moment(op.operateDate, "YYYYMMDDHHmmss")
+          const meta = operationMeta(op.recordTypeCategory)
+          const m = operationMoment(op)
           let credential = ""
           if (op.passwordName) credential = op.passwordName
           if (op.password) credential += ` (${op.password})`
           return {
-            kind,
-            icon: ICONS[kind].icon,
-            color: ICONS[kind].color,
-            tag: this.$t(TAG_KEYS[kind]),
+            kind: meta.kind,
+            icon: meta.icon,
+            color: meta.color,
+            tag: this.$t(meta.tagKey),
             time: m.isValid() ? m.format("DD-MM HH:mm:ss") : "—",
             lockName: op._lockName,
             message: op.recordTypeName || "—",
