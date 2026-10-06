@@ -1,6 +1,25 @@
 # Changelog
 
 
+## [3.1.1] — 2026-10-06
+
+### 🐛 Fixed
+
+- **Reconnections behind the ESP32 gateway**: the gateway never acknowledged a
+  disconnect, so the add-on kept the lock marked as connected and the next
+  connection attempt was never sent — a source of repeated "connect(true)
+  failed" streaks until the ESP32 was rebooted. Sessions are now closed after
+  2 s without an ack, and reconnects go through.
+- **`Peripheral disconnect timed out` error after every session**: now a
+  one-line warning, since the case is handled. With esp32-ble-gateway firmware
+  1.3.3 or later the gateway acknowledges disconnects and the warning no longer
+  appears.
+
+### ⬆️ Dependencies
+
+- `@domodom30/ttlock-sdk-js` 0.8.5 → 0.8.6 (gateway disconnect ack).
+
+
 ## [3.1.0] — 2026-10-06
 
 ### 🎨 UI / UX
