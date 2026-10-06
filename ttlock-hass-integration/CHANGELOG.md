@@ -1,6 +1,29 @@
 # Changelog
 
 
+## [3.1.2] — 2026-10-06
+
+### 🐛 Fixed
+
+- **Slow or failed lock / unlock behind the ESP32 gateway (regression in
+  3.1.1)**: the gateway confirms a disconnect only once the BLE link is really
+  down (up to 6 s), but the next connection was sent after 2 s; the late
+  confirmation then cut the new session, so the first attempt after every
+  session failed (13–20 s per command, or a complete failure when commands
+  followed each other). The next connection now waits for that confirmation
+  (7 s at most).
+- **Lock / unlock stuck behind a log refresh**: the "Refresh" button of the
+  activity log reads the whole log (up to ~2 min) and held the radio until
+  the end. A lock / unlock now interrupts it, and its 45 s deadline only
+  starts once it has the radio — a queued command used to give up without
+  trying.
+
+### ⬆️ Dependencies
+
+- `@domodom30/ttlock-sdk-js` 0.8.6 → 0.8.7 (reconnect waits for the disconnect
+  confirmation).
+
+
 ## [3.1.1] — 2026-10-06
 
 ### 🐛 Fixed
