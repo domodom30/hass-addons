@@ -1,6 +1,17 @@
 # Changelog
 
 
+## [3.1.3] — 2026-10-06
+
+### 🐛 Fixed
+
+- **Relative times shown in English** ("3 hours ago") in the recent activity
+  even with the interface in French: the French date locale was registered on
+  a second copy of the date library bundled by the frontend build, so the
+  language switch had no effect. Dates now follow the interface language
+  ("il y a 3 heures").
+
+
 ## [3.1.2] — 2026-10-06
 
 ### 🐛 Fixed
