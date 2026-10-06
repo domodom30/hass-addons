@@ -52,6 +52,45 @@ function withTimeout(promise, ms, label) {
   // Timer toujours libéré : chaque commande en laissait un vivant 15 à 28 s.
   return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
 }
+
+/**
+ * Budgets des opérations d'identifiants et du reset, tenues sous le mutex radio global.
+ * Filets de sécurité, volontairement larges : le SDK borne chaque commande (~10 s), mais
+ * pas la séquence complète (login admin + commande(s) + pagination des listes). Couper une
+ * écriture en cours rend son issue incertaine — le budget ne doit tomber que sur une
+ * session réellement bloquée.
+ */
+const CREDENTIAL_OP_TIMEOUT_MS = 90 * 1000;
+/** Enrôlement d'empreinte : plusieurs posés du doigt, jusqu'à ~10 s chacun côté SDK. */
+const FINGERPRINT_ENROL_TIMEOUT_MS = 150 * 1000;
+
+/**
+ * Borne une opération BLE de session et, à l'échéance, coupe la session plutôt que de la
+ * laisser vivre : sans déconnexion, la promesse du SDK continuerait après notre abandon et
+ * entrerait en collision avec la session suivante (« Command already in progress »). Les
+ * boucles du SDK sortent sur `!connected` ; la pause laisse ce retour se produire avant
+ * qu'on rende la radio.
+ * @param {import('ttlock-sdk-js').TTLock} lock
+ * @param {Promise} promise
+ * @param {number} ms
+ * @param {string} label
+ */
+async function withSessionTimeout(lock, promise, ms, label) {
+  let timer;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(async () => {
+      console.warn(`BLE timeout (${label}) après ${ms / 1000}s — déconnexion forcée`);
+      if (lock.isConnected()) await lock.disconnect().catch(() => {});
+      await sleep(1000);
+      reject(new Error('BLE timeout (' + label + ')'));
+    }, ms);
+  });
+  try {
+    return await Promise.race([promise, timeout]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
 /**
  * Events:
  * - lockListChanged - when a lock was found during scanning
@@ -1054,9 +1093,10 @@ class Manager extends EventEmitter {
     if (!lock?.hasPassCode()) return false;
     if (!(await this._connectLock(lock))) return false;
     try {
+      // Jamais la valeur du code PIN dans les logs (journaux Supervisor souvent partagés) :
+      // seule sa longueur est utile au diagnostic.
       console.log('[diag] addPasscode params', {
         type,
-        passCode,
         startDate,
         endDate,
         passCodeLen: passCode?.length,
@@ -1064,18 +1104,18 @@ class Manager extends EventEmitter {
       });
       let existing = null;
       try {
-        existing = await lock.getPassCodes();
+        existing = await withSessionTimeout(lock, lock.getPassCodes(), CREDENTIAL_OP_TIMEOUT_MS, 'getPassCodes before add ' + address);
         console.log('[diag] existing passcodes count:', Array.isArray(existing) ? existing.length : existing);
         if (Array.isArray(existing)) {
           const dup = existing.find((p) => String(p.newPassCode) === String(passCode));
-          if (dup) console.warn('[diag] duplicate detected before add:', dup);
+          if (dup) console.warn('[diag] duplicate detected before add (type:', dup.type, ')');
         }
       } catch (e) {
         console.warn('[diag] pre-add getPassCodes failed:', e.message);
       }
-      console.log('addPasscode → addPassCode', { type, passCode });
+      console.log('addPasscode → addPassCode', { type });
 
-      const ok = await lock.addPassCode(type, passCode, startDate, endDate);
+      const ok = await withSessionTimeout(lock, lock.addPassCode(type, passCode, startDate, endDate), CREDENTIAL_OP_TIMEOUT_MS, 'addPassCode ' + address);
       if (!ok) {
         const detail = lock.lastPasscodeError;
         console.error('[diag] addPassCode rejected by lock:', detail ? detail.message : '(no detail — likely admin login or BLE issue)', 'connected:', lock.isConnected());
@@ -1137,19 +1177,25 @@ class Manager extends EventEmitter {
     const lock = this.pairedLocks.get(address);
     if (!lock?.hasPassCode()) return false;
     if (!oldPasscode || !newPasscode || !startDate || !endDate) {
-      console.error('updatePasscode: missing required parameters', { type, oldPasscode, newPasscode, startDate, endDate });
+      console.error('updatePasscode: missing required parameters', {
+        type,
+        hasOldPasscode: !!oldPasscode,
+        hasNewPasscode: !!newPasscode,
+        startDate,
+        endDate
+      });
       return false;
     }
     if (!(await this._connectLock(lock))) return false;
     try {
-      console.log('updatePasscode → updatePassCode', { type, oldPasscode, newPasscode });
-      const ok = await lock.updatePassCode(type, oldPasscode, newPasscode, startDate, endDate);
+      console.log('updatePasscode → updatePassCode', { type });
+      const ok = await withSessionTimeout(lock, lock.updatePassCode(type, oldPasscode, newPasscode, startDate, endDate), CREDENTIAL_OP_TIMEOUT_MS, 'updatePassCode ' + address);
       if (!ok) {
         const detail = lock.lastPasscodeError;
         if (detail) console.error('updatePasscode rejected by lock:', detail.message);
         return false;
       }
-      return await lock.getPassCodes();
+      return await withSessionTimeout(lock, lock.getPassCodes(), CREDENTIAL_OP_TIMEOUT_MS, 'getPassCodes after update ' + address);
     } catch (error) {
       console.error('updatePasscode error:', error);
       return false;
@@ -1166,8 +1212,8 @@ class Manager extends EventEmitter {
       if (!(await this._connectLock(lock))) return deleteSucceeded ? null : false;
       try {
         if (!deleteSucceeded) {
-          console.log(`deletePasscode attempt ${attempt}/3 — delete`, { type, passCode });
-          const ok = await lock.deletePassCode(type, passCode);
+          console.log(`deletePasscode attempt ${attempt}/3 — delete`, { type });
+          const ok = await withSessionTimeout(lock, lock.deletePassCode(type, passCode), CREDENTIAL_OP_TIMEOUT_MS, 'deletePassCode ' + address);
           console.log('deletePassCode result:', ok);
           if (!ok) {
             const detail = lock.lastPasscodeError;
@@ -1181,7 +1227,7 @@ class Manager extends EventEmitter {
           deleteSucceeded = true;
         }
         console.log(`deletePasscode attempt ${attempt}/3 — getPassCodes`);
-        const passcodes = await lock.getPassCodes().catch((e) => {
+        const passcodes = await withSessionTimeout(lock, lock.getPassCodes(), CREDENTIAL_OP_TIMEOUT_MS, 'getPassCodes after delete ' + address).catch((e) => {
           console.error('deletePasscode getPassCodes:', e.message);
           return false;
         });
@@ -1210,10 +1256,10 @@ class Manager extends EventEmitter {
     if (!lock?.hasICCard()) return false;
     if (!(await this._connectLock(lock))) return false;
     try {
-      const card = await lock.addICCard(startDate, endDate);
+      const card = await withSessionTimeout(lock, lock.addICCard(startDate, endDate), CREDENTIAL_OP_TIMEOUT_MS, 'addICCard ' + address);
       if (!card) return false;
       store.setCardAlias(card, alias);
-      const cards = await lock.getICCards();
+      const cards = await withSessionTimeout(lock, lock.getICCards(), CREDENTIAL_OP_TIMEOUT_MS, 'getICCards after add ' + address);
       for (const c of cards) c.alias = store.getCardAlias(c.cardNumber);
       return cards;
     } catch (error) {
@@ -1229,10 +1275,10 @@ class Manager extends EventEmitter {
     if (!lock?.hasICCard()) return false;
     if (!(await this._connectLock(lock))) return false;
     try {
-      const ok = await lock.updateICCard(card, startDate, endDate);
+      const ok = await withSessionTimeout(lock, lock.updateICCard(card, startDate, endDate), CREDENTIAL_OP_TIMEOUT_MS, 'updateICCard ' + address);
       if (!ok && ok !== '') return false;
       store.setCardAlias(card, alias);
-      const cards = await lock.getICCards();
+      const cards = await withSessionTimeout(lock, lock.getICCards(), CREDENTIAL_OP_TIMEOUT_MS, 'getICCards after update ' + address);
       for (const c of cards) c.alias = store.getCardAlias(c.cardNumber);
       return cards;
     } catch (error) {
@@ -1252,7 +1298,7 @@ class Manager extends EventEmitter {
       try {
         if (!deleteSucceeded) {
           console.log(`deleteCard attempt ${attempt}/3 — delete`, { card });
-          const ok = await lock.deleteICCard(card);
+          const ok = await withSessionTimeout(lock, lock.deleteICCard(card), CREDENTIAL_OP_TIMEOUT_MS, 'deleteICCard ' + address);
           console.log('deleteICCard result:', ok);
           if (!ok) {
             if (!lock.isConnected() && attempt < 3) {
@@ -1265,7 +1311,7 @@ class Manager extends EventEmitter {
           deleteSucceeded = true;
         }
         console.log(`deleteCard attempt ${attempt}/3 — getICCards`);
-        const cards = await lock.getICCards().catch((e) => {
+        const cards = await withSessionTimeout(lock, lock.getICCards(), CREDENTIAL_OP_TIMEOUT_MS, 'getICCards after delete ' + address).catch((e) => {
           console.error('deleteCard getICCards:', e.message);
           return false;
         });
@@ -1296,10 +1342,10 @@ class Manager extends EventEmitter {
     if (!lock?.hasFingerprint()) return false;
     if (!(await this._connectLock(lock))) return false;
     try {
-      const finger = await lock.addFingerprint(startDate, endDate);
+      const finger = await withSessionTimeout(lock, lock.addFingerprint(startDate, endDate), FINGERPRINT_ENROL_TIMEOUT_MS, 'addFingerprint ' + address);
       if (!finger) return false;
       store.setFingerAlias(finger, alias);
-      const fingers = await lock.getFingerprints();
+      const fingers = await withSessionTimeout(lock, lock.getFingerprints(), CREDENTIAL_OP_TIMEOUT_MS, 'getFingerprints after add ' + address);
       for (const f of fingers) f.alias = store.getFingerAlias(f.fpNumber);
       return fingers;
     } catch (error) {
@@ -1315,10 +1361,10 @@ class Manager extends EventEmitter {
     if (!lock?.hasFingerprint()) return false;
     if (!(await this._connectLock(lock))) return false;
     try {
-      const ok = await lock.updateFingerprint(finger, startDate, endDate);
+      const ok = await withSessionTimeout(lock, lock.updateFingerprint(finger, startDate, endDate), CREDENTIAL_OP_TIMEOUT_MS, 'updateFingerprint ' + address);
       if (!ok && ok !== '') return false;
       store.setFingerAlias(finger, alias);
-      const fingers = await lock.getFingerprints();
+      const fingers = await withSessionTimeout(lock, lock.getFingerprints(), CREDENTIAL_OP_TIMEOUT_MS, 'getFingerprints after update ' + address);
       for (const f of fingers) f.alias = store.getFingerAlias(f.fpNumber);
       return fingers;
     } catch (error) {
@@ -1338,7 +1384,7 @@ class Manager extends EventEmitter {
       try {
         if (!deleteSucceeded) {
           console.log(`deleteFinger attempt ${attempt}/3 — delete`, { finger });
-          const ok = await lock.deleteFingerprint(finger);
+          const ok = await withSessionTimeout(lock, lock.deleteFingerprint(finger), CREDENTIAL_OP_TIMEOUT_MS, 'deleteFingerprint ' + address);
           console.log('deleteFingerprint result:', ok);
           if (!ok) {
             if (!lock.isConnected() && attempt < 3) {
@@ -1351,7 +1397,7 @@ class Manager extends EventEmitter {
           deleteSucceeded = true;
         }
         console.log(`deleteFinger attempt ${attempt}/3 — getFingerprints`);
-        const fingers = await lock.getFingerprints().catch((e) => {
+        const fingers = await withSessionTimeout(lock, lock.getFingerprints(), CREDENTIAL_OP_TIMEOUT_MS, 'getFingerprints after delete ' + address).catch((e) => {
           console.error('deleteFinger getFingerprints:', e.message);
           return false;
         });
@@ -1639,7 +1685,10 @@ class Manager extends EventEmitter {
     if (lock === undefined) return false;
     if (!(await this._connectLock(lock))) return false;
     try {
-      const res = await lock.resetLock();
+      // Timeout → false, comme une erreur : lockData est conservé. Si la commande avait
+      // malgré tout atteint la serrure, elle est réinitialisée mais reste appairée ici —
+      // même situation qu'une réponse perdue avant ce changement.
+      const res = await withSessionTimeout(lock, lock.resetLock(), CREDENTIAL_OP_TIMEOUT_MS, 'resetLock ' + address);
       if (res) {
         // Reset serrure : le compteur d'enregistrements firmware repartira de 0 au
         // ré-appairage. Remettre les deux seuils de déduplication à 0 pour ne pas ignorer
@@ -3080,4 +3129,5 @@ class Manager extends EventEmitter {
 
 const manager = new Manager();
 
+export { withSessionTimeout };
 export default manager;

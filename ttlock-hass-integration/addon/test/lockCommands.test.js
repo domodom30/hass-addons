@@ -1,7 +1,10 @@
-import { test, beforeEach } from 'node:test';
+import { test, beforeEach, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { register } from 'node:module';
 import { EventEmitter } from 'node:events';
+import { promises as fs } from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 
 // manager.js n'est pas importable tel quel en test : le SDK charge le binding noble natif
 // au chargement. On substitue au SDK un module minimal exposant ce que manager.js importe.
@@ -22,6 +25,17 @@ const loader = `
   }
 `;
 register('data:text/javascript,' + encodeURIComponent(loader));
+
+// Le store écrit par défaut dans /data (dossier de l'add-on) : la lecture du journal
+// testée ici le sauvegarde, il faut donc le rediriger vers un dossier jetable.
+const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), 'ttlock-lockcmd-'));
+const { default: store } = await import('../src/store.js');
+store.setDataPath(dataDir);
+after(async () => {
+  await store.saveData();
+  await fs.rm(dataDir, { recursive: true, force: true });
+});
+
 const { default: manager } = await import('../src/manager.js');
 
 const LOCKED = 0;

@@ -10,7 +10,7 @@
 [![HA](https://img.shields.io/badge/Home%20Assistant-compatible-41BDF5?style=flat-square&logo=homeassistant)](https://www.home-assistant.io/)
 [![BLE](https://img.shields.io/badge/Bluetooth-BLE-0082FC?style=flat-square&logo=bluetooth)](https://github.com/abandonware/noble)
 [![SDK](https://img.shields.io/badge/SDK-%40domodom30%2Fttlock--sdk--js-orange?style=flat-square)](https://www.npmjs.com/package/@domodom30/ttlock-sdk-js)
-[![License](https://img.shields.io/badge/license-MIT-green?style=flat-square)](LICENSE.md)
+[![License](https://img.shields.io/badge/license-Apache%202.0-green?style=flat-square)](LICENSE.md)
 
 > ⚠️ **Work in progress** — Feedback and bug reports welcome: [open an issue](https://github.com/domodom30/hass-addons/issues)
 
@@ -112,11 +112,11 @@
 ```yaml
 gateway: "none"         # "none" = local BLE, "noble" = remote Noble BLE gateway
 gateway_host: ""        # Noble gateway hostname or IP (if gateway: noble)
-gateway_port: 9000      # Gateway port
+gateway_port: 8080      # Gateway port (2846 if left empty)
 gateway_key: ""         # Gateway AES key
 gateway_user: ""        # Gateway username
 gateway_pass: ""        # Gateway password
-ignore_crc: true        # Ignore CRC errors (required by many firmwares)
+ignore_crc: true        # Ignore CRC errors — enabled by default (required by many firmwares)
 debug_communication: false  # Verbose BLE protocol logs
 debug_mqtt: false           # Verbose MQTT logs
 gateway_debug: false        # Verbose gateway logs

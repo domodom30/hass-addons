@@ -4,6 +4,7 @@ import manager from './manager.js';
 import express from 'express';
 import api from '../api/index.js';
 import { detectLanguage } from './haLanguage.js';
+import { DEFAULT_ALLOWED_IPS, isAllowedAddress } from './accessControl.js';
 
 /**
  * Validate and normalise the noble-gateway options.
@@ -128,14 +129,24 @@ export default async function init(options = {}) {
   const port = options.port ?? 55099;
 
   // Because we use host networking we need to filter out
-  // all requests except those coming from the HA proxy
-  const localIP = options.localIP ?? ['172.30.32.2', '::ffff:172.30.32.2', '::1', '::ffff:127.0.0.1'];
+  // all requests except those coming from the HA proxy.
+  // The same allow-list is applied to WebSocket upgrades in api(): the `ws` server
+  // handles them directly and never goes through this Express middleware.
+  const localIP = options.localIP ?? DEFAULT_ALLOWED_IPS;
   app.use((req, res, next) => {
-    if (localIP.includes(req.ip)) {
+    if (isAllowedAddress(req.ip, localIP)) {
       next();
     } else {
       res.status(403).send('Denied');
     }
+  });
+
+  // Supervisor watchdog (config.yaml `watchdog`): a 2xx proves the event loop still
+  // answers HTTP — a TCP check would pass even with a frozen loop, the kernel accepts the
+  // connection on its own. Deliberately independent of BLE/MQTT state: an absent adapter
+  // or broker must not trigger a restart loop.
+  app.get('/health', (req, res) => {
+    res.type('text/plain').send('ok');
   });
 
   app.use(express.json({ limit: '1mb' }));
@@ -171,5 +182,5 @@ export default async function init(options = {}) {
     console.log('Server started');
   });
 
-  api(server);
+  api(server, { allowedIPs: localIP });
 }

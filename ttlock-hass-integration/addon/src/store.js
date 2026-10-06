@@ -1,4 +1,5 @@
 import { promises as fs } from 'node:fs';
+import { isPairedEntry } from './lockDataImport.js';
 
 class Store {
   settingsPath = '/data';
@@ -32,8 +33,7 @@ class Store {
    * @param {any} entry
    */
   _isPairedEntry(entry) {
-    const pd = entry && entry.privateData;
-    return !!(pd && pd.aesKey && pd.admin && pd.admin.adminPs && pd.admin.unlockKey);
+    return isPairedEntry(entry);
   }
 
   setLockData(newData) {

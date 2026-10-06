@@ -1,5 +1,5 @@
 name: "TTLock"
-version: "2.8.6"
+version: "3.0.0"
 slug: ttlock-hass-integration
 description: "Integration of the offline TTLock SDK into Home Assistant"
 url: "https://github.com/domodom30/hass-addons"
@@ -25,6 +25,11 @@ privileged:
 ingress: true
 ingress_port: 55099
 ingress_entry: "frontend/"
+
+# Supervisor application watchdog (only active when the user enables the
+# "Watchdog" toggle). Polled every 2 min from the Supervisor (172.30.32.2, allowed
+# by the add-on IP filter); restart after 2 consecutive failures.
+watchdog: "http://[HOST]:[PORT:55099]/health"
 
 # Services
 services:
