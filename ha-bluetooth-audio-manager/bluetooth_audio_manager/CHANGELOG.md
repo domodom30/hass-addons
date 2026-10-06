@@ -1,3 +1,16 @@
+## [3.3.7] — 2026-10-06
+
+### 🔧 Changed
+
+- **Supervisor deprecation warning removed**: the `map` entry now uses the
+  `app_config` type instead of the legacy `addon_config` one, which the
+  Supervisor flagged at startup ("uses legacy map type 'addon_config'; use
+  'app_config' instead"). The folder is still mounted at `/config`, so stored
+  devices and settings are kept. Requires a Supervisor with the app-based map
+  options (2026-07 or newer).
+
+---
+
 ## [3.3.6] — 2026-07-12
 
 ### 🐛 Fixed
