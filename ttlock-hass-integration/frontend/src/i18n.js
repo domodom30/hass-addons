@@ -1,6 +1,9 @@
 import { createI18n as _createI18n } from 'vue-i18n'
 import moment from 'moment'
-import 'moment/locale/fr'
+// Locale ESM : Vite résout `moment` vers dist/moment.js (champ jsnext:main), alors que
+// `moment/locale/fr` (UMD) s'enregistrait sur une autre copie (moment.js) — moment.locale('fr')
+// restait sans effet et les dates relatives s'affichaient en anglais (« 3 hours ago »).
+import 'moment/dist/locale/fr'
 import en from './locales/en.json'
 import fr from './locales/fr.json'
 
