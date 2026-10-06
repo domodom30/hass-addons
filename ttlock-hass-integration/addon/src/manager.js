@@ -836,11 +836,17 @@ class Manager extends EventEmitter {
     }
     const COMMAND_DEADLINE_MS = 45 * 1000;
     const MAX_ATTEMPTS = 3;
-    const deadline = Date.now() + COMMAND_DEADLINE_MS;
     const superseded = () => this._desiredState.get(address) !== target;
     const startedAt = Date.now();
     let holdingRadio = false;
+    let deadline;
     try {
+      // Radio d'abord, échéance ensuite : comptée avant l'attente, l'échéance pouvait être
+      // épuisée par une opération longue devant (rafraîchissement du journal) et la commande
+      // abandonnait sans avoir tenté une seule connexion.
+      await this._acquireUserRadio(address);
+      holdingRadio = true;
+      deadline = Date.now() + COMMAND_DEADLINE_MS;
       for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
         if (superseded()) {
           console.log(`${target} pour ${address} abandonné : remplacé par une commande plus récente`);
@@ -1604,6 +1610,10 @@ class Manager extends EventEmitter {
     if (!(await this._connectLock(lock, false))) {
       return false;
     }
+    // Posé après notre propre connexion : seule une opération utilisateur *suivante* peut
+    // l'interrompre (cf. _acquireUserRadio).
+    lock._manualOplogRunning = true;
+    lock._manualOplogAborted = false;
     try {
       // Force the SDK's 0xffff fetch path (new events) so a manual refresh always pulls
       // fresh entries. Keep noCache=false so the cache is merged — passing noCache=true
@@ -1668,7 +1678,9 @@ class Manager extends EventEmitter {
       store.setLastProcessedDate(address, lastDate);
       return operations.map((op) => this._enrichOperation(op));
     } catch (error) {
-      if (error?.message?.includes('No response to checkAdmin')) {
+      if (lock._manualOplogAborted) {
+        console.log(`getOperationLog [${address}]: rafraîchissement interrompu pour une commande utilisateur`);
+      } else if (error?.message?.includes('No response to checkAdmin')) {
         // Le SDK a déjà loggé la stack trace via [ttlock:api] — on émet juste le contexte
         console.warn(`getOperationLog [${address}]: authentification admin BLE échouée — serrure hors portée ou occupée`);
       } else {
@@ -1676,6 +1688,7 @@ class Manager extends EventEmitter {
       }
       return false;
     } finally {
+      lock._manualOplogRunning = false;
       this._releaseConnect(address);
     }
   }
@@ -1932,6 +1945,38 @@ class Manager extends EventEmitter {
    *   without admin auth — avoids an unnecessary checkAdminCommand that causes some lock
    *   firmware to disconnect immediately after the connect(false) handshake.
    */
+  /**
+   * Prend la radio pour une opération utilisateur (tenue ensuite via _mutexReleases, rendue par
+   * _releaseMutex/_releaseConnect). Priorité utilisateur : les tâches de fond qui attendent la
+   * radio s'effacent, une lecture automatique du journal est écourtée (le probe s'arrête à la
+   * sonde suivante) et un rafraîchissement manuel du journal est interrompu — il pouvait
+   * tenir la radio près de deux minutes (lecture complète de plusieurs centaines d'entrées).
+   * @param {string} address
+   */
+  async _acquireUserRadio(address) {
+    this._userOpsWaiting++;
+    for (const other of this.pairedLocks.values()) {
+      if (other._processingOperationLog && !other._oplogAbandoned) {
+        console.log('Lecture du journal de', other.getAddress(), 'écourtée pour une commande utilisateur');
+        other._oplogAbandoned = true;
+      }
+      if (other._manualOplogRunning && !other._manualOplogAborted) {
+        // Les boucles de lecture du SDK sortent sur !isConnected() : couper la session est le
+        // seul moyen de rendre la radio avant la fin de la lecture complète.
+        console.log('Rafraîchissement du journal de', other.getAddress(), 'interrompu pour une commande utilisateur');
+        other._manualOplogAborted = true;
+        if (other.isConnected()) other.disconnect().catch(() => {});
+      }
+    }
+    let release;
+    try {
+      release = await this._acquireMutex(address);
+    } finally {
+      this._userOpsWaiting--;
+    }
+    this._mutexReleases.set(address, release);
+  }
+
   async _connectLock(lock, needsAdmin = true, opts = {}) {
     const { skipDataRead = false, radioHeld = false, keepRadio = false, maxAttempts = 4, deadline = Infinity } = opts;
     const address = lock.getAddress();
@@ -1976,22 +2021,7 @@ class Manager extends EventEmitter {
     // Serialize all BLE ops on this lock — without this, parallel user ops collide
     // on the same BLE session and the SDK rejects them with "Command already in progress".
     if (!radioHeld || !this._mutexReleases.has(address)) {
-      // Priorité utilisateur : les tâches de fond qui attendent la radio s'effaceront, et
-      // une lecture de journal en cours est écourtée (le probe s'arrête à la sonde suivante).
-      this._userOpsWaiting++;
-      for (const other of this.pairedLocks.values()) {
-        if (other._processingOperationLog && !other._oplogAbandoned) {
-          console.log('Lecture du journal de', other.getAddress(), 'écourtée pour une commande utilisateur');
-          other._oplogAbandoned = true;
-        }
-      }
-      let release;
-      try {
-        release = await this._acquireMutex(address);
-      } finally {
-        this._userOpsWaiting--;
-      }
-      this._mutexReleases.set(address, release);
+      await this._acquireUserRadio(address);
     }
     this.waitingForConnect.add(address);
     const giveUp = () => {
