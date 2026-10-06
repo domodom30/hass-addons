@@ -41,13 +41,6 @@ if $(bashio::config.true "gateway_debug"); then
   export WEBSOCKET_DEBUG=1
 fi
 
-# --- Free the BLE adapter so noble can grab the exclusive HCI_CHANNEL_USER ---
-# On Home Assistant OS bluetoothd keeps hci0 UP/managed, forcing noble onto the
-# shared RAW channel where passive scan works but "LE Create Connection" gets
-# clobbered (every connect() times out). Powering the adapter off via BlueZ frees
-# it; noble then opens it on its OWN exclusive HCI user channel and brings it back
-# up itself — which requires the NET_ADMIN capability (see config.yaml privileged).
-# Skipped in gateway mode (BLE runs on the remote ESP32, not the local adapter).
 cd /app
 # exec : node remplace le shell et reçoit directement le SIGTERM du Supervisor
 # (sans exec, bash meurt sur le signal sans le transmettre → exit 143, pas d'arrêt propre).

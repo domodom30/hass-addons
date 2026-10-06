@@ -6,3 +6,4 @@ claude/*.*
 .github/copilot-instructions.md
 *.local.ps1
 addon/dev-data/
+.mcp.json

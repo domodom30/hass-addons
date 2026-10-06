@@ -2,6 +2,8 @@ import { sleep } from '@domodom30/ttlock-sdk-js';
 import WebSocket from 'ws';
 import manager from '../src/manager.js';
 import store from '../src/store.js';
+import { DEFAULT_ALLOWED_IPS, createWsVerifyClient } from '../src/accessControl.js';
+import { validateLockDataImport } from '../src/lockDataImport.js';
 import Message from './Message.js';
 import WsApi from './WsApi.js';
 
@@ -61,7 +63,12 @@ async function handlePasscode(api, ws, msg) {
   }
 
   const passcode = msg.data.passcode;
-  console.log('passcode operation received:', JSON.stringify(passcode));
+  // Pas de JSON.stringify(passcode) : il contient les codes PIN en clair.
+  console.log('passcode operation received:', {
+    type: passcode.type,
+    startDate: passcode.startDate,
+    endDate: passcode.endDate
+  });
   const address = msg.data.address;
 
   const passCodeIsNew = passcode.passCode == null || passcode.passCode === '' || passcode.passCode == -1;
@@ -259,14 +266,32 @@ async function handleConfig(api, msg) {
     return;
   }
   if (!msg.data.set) return;
+  // Jamais le contenu dans les logs : il porte les clés des serrures, et le message d'une
+  // SyntaxError de JSON.parse en cite un extrait (Node ≥ 20).
+  let lockData;
   try {
-    const lockData = JSON.parse(msg.data.set);
+    lockData = JSON.parse(msg.data.set);
+  } catch {
+    console.error('Failed to set config: invalid JSON');
+    api.sendConfigConfirm('Failed to set config');
+    return;
+  }
+  const check = validateLockDataImport(lockData, store.getLockData());
+  if (!check.ok) {
+    console.warn('Config import refused:', check.error);
+    api.sendConfigConfirm('Invalid config: ' + check.error);
+    return;
+  }
+  if (check.removed.length > 0) {
+    console.warn('Config import removes paired lock(s):', check.removed.join(', '));
+  }
+  try {
     store.setLockData(lockData);
     manager.updateClientLockDataFromStore();
-    manager.startScan();
+    manager.startScan().catch((e) => console.error('startScan after config error:', e.message));
     api.sendConfigConfirm();
   } catch (error) {
-    console.error('Failed to set config:', error);
+    console.error('Failed to set config:', error.message);
     api.sendConfigConfirm('Failed to set config');
   }
 }
@@ -364,7 +389,7 @@ async function onMessage(wss, api, ws, message) {
       WsApi.sendStatus(wss);
       break;
     case 'scan':
-      manager.startScan();
+      manager.startScan().catch((e) => console.error('startScan error:', e.message));
       break;
     case 'pair':
       await handlePair(wss, msg);
@@ -413,8 +438,20 @@ async function onMessage(wss, api, ws, message) {
 
 // ── export ───────────────────────────────────────────────────────────────────
 
-export default async function initApi(server) {
-  const wss = new WebSocket.Server({ server, path: '/api' });
+/**
+ * @param {import('node:http').Server} server
+ * @param {Object} [options]
+ * @param {readonly string[]} [options.allowedIPs] adresses autorisées (défaut : proxy Ingress + loopback)
+ */
+export default async function initApi(server, options = {}) {
+  // verifyClient : le serveur `ws` traite l'upgrade HTTP lui-même, le filtre IP du
+  // middleware Express (init.js) ne s'applique donc pas ici. Sans ce hook, n'importe quel
+  // client du LAN pouvait piloter les serrures et lire lockData via ws://<hôte>:55099/api.
+  const wss = new WebSocket.Server({
+    server,
+    path: '/api',
+    verifyClient: createWsVerifyClient(options.allowedIPs ?? DEFAULT_ALLOWED_IPS)
+  });
 
   async function sendStatusUpdate() {
     WsApi.sendStatus(wss);
@@ -455,7 +492,8 @@ export default async function initApi(server) {
   wss.on('connection', (ws) => {
     const api = new WsApi(ws);
 
-    ws.on('message', async (message) => onMessage(wss, api, ws, message));
+    // ws ≥ 8 passe les messages texte en Buffer (plus de décodage automatique en chaîne).
+    ws.on('message', async (message) => onMessage(wss, api, ws, message.toString('utf8')));
 
     async function sendLockCardScan(lock) {
       api.sendCardScan(lock.getAddress());

@@ -35,16 +35,33 @@ jobs:
             | sed 's/version: *"\?\([^"]*\)"\?/\1/')
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
 
+  test:
+    name: Unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          # Same major as the add-on image (Alpine 3.24 ships Node 24).
+          node-version: "24"
+      # No npm install: the tests stub the SDK (native noble binding) and only
+      # import local modules, so they run without node_modules.
+      # No path argument: since Node 21 `node --test <dir>` no longer accepts a
+      # directory; bare `node --test` discovers **/*.test.js (node_modules excluded).
+      - name: node --test
+        working-directory: ttlock-hass-integration/addon
+        run: node --test
+
   build:
     name: Build & publish
-    needs: version
+    needs: [version, test]
     uses: ./.github/workflows/_build-addon.yaml
     with:
       image-name: ttlock-hass-integration
       architectures: '["amd64", "aarch64"]'
       context: ttlock-hass-integration
       dockerfile: ttlock-hass-integration/Dockerfile
-      base-version: "3.19"
+      base-version: "3.24"
       version: ${{ needs.version.outputs.version }}
       push: ${{ github.event_name != 'pull_request' }}
     secrets: inherit

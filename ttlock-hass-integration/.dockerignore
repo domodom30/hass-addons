@@ -1,2 +1,4 @@
 frontend
 addon/node_modules
+addon/dev-data
+addon/.*

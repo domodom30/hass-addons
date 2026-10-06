@@ -1,6 +1,54 @@
 # Changelog
 
 
+## [Unreleased]
+
+### 🔒 Security
+
+- **Web UI WebSocket reachable from the LAN**: the IP allow-list (Ingress proxy
+  and loopback) now also applies to WebSocket connections on `/api`, which
+  bypassed it — with host networking, any LAN client could control the locks
+  and read lock credentials on port 55099. They are now refused with a 403.
+- **PIN codes no longer written to the add-on logs**: adding, updating or
+  deleting a PIN logged the code in clear text (logs often shared in bug
+  reports). Only the type, validity dates and code length are logged now.
+- **Config import could wipe the lock keys**: importing a malformed config (not
+  an array, missing or duplicate addresses, a new lock without its keys) could
+  erase the stored credentials of every lock. Such imports are now refused with
+  an explanatory message and nothing is changed. Removing a lock through the
+  import is still possible, and is now logged.
+- **Imported config no longer written to the logs**: a JSON syntax error in a
+  config import logged an excerpt of the submitted text, which could include
+  lock keys. Only a generic message is logged now.
+
+### 🐛 Fixed
+
+- **A stuck PIN / card / fingerprint operation or unpair could freeze every
+  lock**: these operations hold the BLE radio and had no overall time limit.
+  They now give up after 90 s (150 s for fingerprint enrolment) and close the
+  BLE session, so lock/unlock commands are no longer blocked behind them.
+
+### ✨ Added
+
+- **Supervisor watchdog support**: with the add-on's **Watchdog** toggle
+  enabled, Home Assistant now also checks that the add-on still answers (every
+  2 min, via a new `/health` endpoint) and restarts it when it stops
+  responding, not only when its container stops. The toggle is off by default.
+
+### ⬆️ Dependencies
+
+- Home Assistant base image 3.19 → 3.24 (Alpine 3.24, Node.js 20 → 24): Alpine
+  3.19 and Node.js 20 are end-of-life and the 3.19 base image no longer gets
+  security updates. Supported until 2028.
+- Reproducible builds: `addon/package-lock.json` is now versioned and the image
+  installs dependencies with `npm ci`, so every build gets exactly the same
+  versions (SDK, MQTT, WebSocket, Express…) instead of the latest matching ones.
+- Smaller image: native BLE modules are now compiled in a separate build stage,
+  so compilers, headers, Python, npm and git are no longer shipped in the
+  add-on image.
+- `ws` 7.5 → 8.22 (web UI WebSocket server).
+
+
 ## [2.8.6] — 2026-10-05
 
 ### ⚡ Faster lock / unlock

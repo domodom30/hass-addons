@@ -26,6 +26,11 @@ ingress: true
 ingress_port: 55099
 ingress_entry: "frontend/"
 
+# Supervisor application watchdog (only active when the user enables the
+# "Watchdog" toggle). Polled every 2 min from the Supervisor (172.30.32.2, allowed
+# by the add-on IP filter); restart after 2 consecutive failures.
+watchdog: "http://[HOST]:[PORT:55099]/health"
+
 # Services
 services:
   - mqtt:want

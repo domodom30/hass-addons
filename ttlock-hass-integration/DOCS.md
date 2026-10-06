@@ -24,7 +24,7 @@ Use the Configure tab to specify gateway options:
 ```yaml
 gateway: "noble"
 gateway_host: "192.168.1.10"
-gateway_port: 80
+gateway_port: 8080
 gateway_key: "00112233445566778899aabbccddeeff"
 gateway_user: "admin"
 gateway_pass: "admin"
@@ -34,7 +34,9 @@ Please see [ttlock-sdk-js Gateway option](https://github.com/domodom30/ttlock-sd
 
 ## Other options
 
-Sometimes the lock just does not want to send the right CRC even tho the packet contains the proper data. In such cases enabling `ignore_crc` will tell the addon not to fail when bad CRC messages are received.  
+Sometimes the lock just does not want to send the right CRC even tho the packet contains the proper data. `ignore_crc` (enabled by default) makes the addon accept responses with a bad CRC on the first try.  
+
+With `ignore_crc: false`, a command whose response has a bad CRC is retried up to 3 times. The response is still accepted if every attempt returns the same CRC (firmwares that always send a wrong one), and the command fails only when they differ (actual transmission corruption). This filters corrupted frames, but costs up to 3 round trips per command on such firmwares, so lock/unlock gets slower. Lock communication is AES-encrypted either way: this option is about reliability, not authentication.  
 
 ```yaml
 ignore_crc: true // ignore bad CRC in responses from lock
