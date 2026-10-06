@@ -201,3 +201,59 @@ test('lecture du journal : l’état live est lu avant le journal, pendant que l
   assert.deepEqual(calls, ['status', 'oplog']);
   assert.deepEqual(emitted, ['lockUnlock']);
 });
+
+test('une commande en file derrière une opération longue tente bien sa connexion', async () => {
+  const { lock, executed } = makeLock('AA:00:00:00:00:07');
+  const address = lock.getAddress();
+  manager.pairedLocks.set(address, lock);
+
+  // Une autre opération tient la radio plus longtemps que l'échéance d'une commande (45 s) :
+  // on avance l'horloge pendant l'attente au lieu d'attendre réellement.
+  const releaseOther = await manager._acquireMutex('AA:00:00:00:00:FF');
+  const realNow = Date.now;
+  let offset = 0;
+  Date.now = () => realNow() + offset;
+  try {
+    const unlock = manager.unlockLock(address);
+    await new Promise((r) => setTimeout(r, 5));
+    offset = 60 * 1000;
+    releaseOther();
+    assert.equal(await unlock, true);
+  } finally {
+    Date.now = realNow;
+  }
+
+  assert.deepEqual(executed, ['UNLOCK']);
+  assert.equal(lock.connectCalls.length, 1);
+});
+
+test('un rafraîchissement manuel du journal est interrompu par une commande utilisateur', async () => {
+  const { lock, executed } = makeLock('AA:00:00:00:00:08');
+  const address = lock.getAddress();
+  manager.pairedLocks.set(address, lock);
+  // Lecture complète « sans fin » : comme celle du SDK, elle ne s'arrête que si la session tombe.
+  let fetchStopped = false;
+  lock.getOperationLog = async () => {
+    while (lock.isConnected()) await new Promise((r) => setTimeout(r, 10));
+    fetchStopped = true;
+    return [];
+  };
+
+  const refresh = manager.getOperationLog(address, true);
+  await new Promise((r) => setTimeout(r, 30));
+  assert.equal(lock._manualOplogRunning, true);
+
+  // Borné : sans interruption, la commande attendrait indéfiniment derrière la lecture.
+  let timer;
+  const outcome = await Promise.race([
+    manager.unlockLock(address),
+    new Promise((r) => (timer = setTimeout(() => r('timeout'), 2000)))
+  ]);
+  clearTimeout(timer);
+  if (outcome === 'timeout') await lock.disconnect(); // débloque la lecture pour finir proprement
+  assert.equal(outcome, true, 'la commande n’attend pas la fin de la lecture complète');
+  assert.equal(fetchStopped, true);
+  assert.deepEqual(await refresh, []);
+  assert.equal(lock._manualOplogRunning, false);
+  assert.deepEqual(executed, ['UNLOCK']);
+});
