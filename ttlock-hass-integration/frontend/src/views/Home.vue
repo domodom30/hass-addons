@@ -60,7 +60,7 @@
               @click="openGlobalActivity"
             >{{ $t('dashboard.viewAll') }}</v-btn>
           </div>
-          <v-divider />
+          <v-divider opacity="0.08" />
 
           <div v-if="recentRows.length === 0" class="d-flex flex-column align-center text-center py-8">
             <v-icon size="28" color="medium-emphasis" class="mb-2">mdi-history</v-icon>
@@ -75,14 +75,14 @@
                 <span>{{ $t('dashboard.activity.credential') }}</span>
                 <span class="text-end">{{ $t('dashboard.activity.when') }}</span>
               </div>
-              <v-divider />
+              <v-divider opacity="0.08" />
             </template>
 
             <div v-for="(row, i) in recentRows" :key="row.key">
-              <v-divider v-if="i > 0" />
+              <v-divider v-if="i > 0" opacity="0.06" />
 
               <!-- Ordinateur / tablette : colonnes -->
-              <div v-if="mdAndUp" class="activity-grid align-center px-4 py-3">
+              <div v-if="mdAndUp" class="activity-grid align-center px-4 py-1">
                 <div class="d-flex align-center ga-3 min-w-0">
                   <v-avatar size="32" :color="row.color" variant="tonal" class="flex-shrink-0">
                     <v-icon size="18" :icon="row.icon" />
@@ -210,7 +210,7 @@ export default {
       this.$store.commit('setOverlay', { overlay: 'addWizard' })
     },
     openGlobalActivity() {
-      this.$store.commit("setOverlay", { overlay: "logs", address: null })
+      this.$router.push({ name: "Activity" })
     },
   },
 }

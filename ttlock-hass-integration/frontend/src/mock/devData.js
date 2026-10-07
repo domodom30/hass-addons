@@ -54,7 +54,7 @@ function ago(minutesAgo) {
 }
 
 // Fabrique un jeu d'opérations couvrant tous les `recordTypeCategory` consommés
-// par LockLogsDialog.lines et Home.recentActions, y compris un type inconnu
+// par Activity.lines et Home.recentActions, y compris un type inconnu
 // (→ rendu « other ») et des entrées avec credential.
 function buildOperations(startRecord) {
   let n = startRecord;

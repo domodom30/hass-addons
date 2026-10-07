@@ -30,8 +30,7 @@
   "logs": {
     "title": "Activity log",
     "allLocks": "All locks",
-    "loading": "Loading…",
-    "autoScroll": "Auto-scroll"
+    "loading": "Loading…"
   },
   "wizard": {
     "title": "Add a lock",
@@ -61,7 +60,7 @@
       "event": "Event",
       "lock": "Lock",
       "credential": "Credential",
-      "when": "When"
+      "when": "Date"
     },
     "yourLocks": "Your locks",
     "yourLocksHint": "Quick access to lock control and credentials",

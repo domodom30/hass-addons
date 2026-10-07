@@ -423,7 +423,7 @@ export default {
       this.$store.commit("setOverlay", { overlay: "config" });
     },
     openGlobalActivity() {
-      this.$store.commit("setOverlay", { overlay: "logs", address: null });
+      this.$router.push({ name: "Activity" });
     },
 
     /** Construit l'URL de base de l'API (fonctionne en HA ingress et en dev Vite). */
