@@ -30,8 +30,7 @@
   "logs": {
     "title": "Journal d'activité",
     "allLocks": "Toutes les serrures",
-    "loading": "Chargement…",
-    "autoScroll": "Défilement auto"
+    "loading": "Chargement…"
   },
   "wizard": {
     "title": "Ajouter une serrure",
@@ -61,7 +60,7 @@
       "event": "Événement",
       "lock": "Serrure",
       "credential": "Identifiant",
-      "when": "Quand"
+      "when": "Date"
     },
     "yourLocks": "Vos serrures",
     "yourLocksHint": "Accès rapide aux contrôles et aux identifiants",

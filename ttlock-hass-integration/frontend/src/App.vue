@@ -18,7 +18,6 @@
 
       <!-- Overlays (modèle page unique façon ESPHome) -->
       <ConfigDlg :show="overlay === 'config'" @cancel="clearOverlay" />
-      <LockLogsDialog />
       <AddLockWizard />
 
       <!-- Credentials overlay -->
@@ -103,7 +102,6 @@
 <script>
 import AppTopBar from "@/components/AppTopBar.vue"
 import ConfigDlg from "@/components/ConfigDlg.vue"
-import LockLogsDialog from "@/components/LockLogsDialog.vue"
 import AddLockWizard from "@/components/AddLockWizard.vue"
 import CredentialsManager from "@/components/CredentialsManager.vue"
 import SettingsManager from "@/components/SettingsManager.vue"
@@ -112,7 +110,7 @@ import Notices from "@/components/Notices.vue"
 
 export default {
   components: {
-    AppTopBar, ConfigDlg, LockLogsDialog, AddLockWizard,
+    AppTopBar, ConfigDlg, AddLockWizard,
     CredentialsManager, SettingsManager, Errors, Notices,
   },
   computed: {
@@ -168,7 +166,12 @@ export default {
 
 .font-mono {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  font-size: 0.72rem;
+  font-size: 0.75rem;
+}
+
+/* Calendriers : le défaut global VBtn (font-weight-medium) rendait les jours trop gras */
+.v-date-picker .v-btn {
+  font-weight: 400 !important;
 }
 
 /* Soft scrollbar tuned for both themes */

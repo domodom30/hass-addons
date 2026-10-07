@@ -1,5 +1,5 @@
 // Affichage des opérations du journal : source unique pour le tableau de bord
-// (views/Home.vue) et le journal complet (components/LockLogsDialog.vue).
+// (views/Home.vue) et le journal complet (views/Activity.vue).
 //
 // Couleurs alignées sur l'état des serrures : verrouillé = sûr (success),
 // déverrouillé = attention (warning), échec et alarme = erreur.

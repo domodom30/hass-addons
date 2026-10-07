@@ -1,6 +1,25 @@
 # Changelog
 
 
+## [3.1.4] — 2026-10-07
+
+### 🎨 UI / UX
+
+- **Activity log is now a dedicated page** instead of a modal dialog: "View
+  all" in the recent activity, the top bar menu and a lock's menu open
+  `#/activity` (all locks) or `#/activity/<address>` (one lock), with a back
+  button to the dashboard.
+- **Activity log laid out like the recent activity**: event, lock, credential
+  and date columns (stacked on mobile), newest first. The lock column is hidden
+  on a single lock's log; the auto-scroll switch is gone.
+- **Date filters show the date as DD/MM/YYYY** instead of the raw date object.
+- **Compact date pickers**: no large header, normal-weight day numbers (they
+  inherited the bold button style), applied to every date picker of the app.
+- **Lighter separators** in the recent activity and the activity log, and the
+  "When" column header is now "Date".
+- **No more hover effect on the lock cards** (lift, coloured border, shadow).
+
+
 ## [3.1.3] — 2026-10-06
 
 ### 🐛 Fixed

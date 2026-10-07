@@ -197,5 +197,10 @@ export default createVuetify({
     VDialog: {
       scrollable: true,
     },
+    // Calendrier compact : la valeur choisie est déjà affichée dans le champ.
+    VDatePicker: {
+      hideHeader: true,
+      controlHeight: 48,
+    },
   },
 });

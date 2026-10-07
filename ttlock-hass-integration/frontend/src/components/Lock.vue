@@ -110,7 +110,7 @@
             />
           </template>
           <v-list density="comfortable">
-            <v-list-item @click="openOverlay('logs')">
+            <v-list-item @click="openActivity">
               <template #prepend>
                 <v-icon color="success" size="18" class="mr-3"
                   >mdi-console-line</v-icon
@@ -335,6 +335,9 @@ export default {
         console.error(error);
       }
     },
+    openActivity() {
+      this.$router.push({ name: "Activity", params: { address: this.lock.address } });
+    },
     openOverlay(overlay) {
       this.$store.commit("setOverlay", { overlay, address: this.lock.address });
     },
@@ -359,17 +362,6 @@ export default {
 </script>
 
 <style scoped>
-.lock-card {
-  transition:
-    transform 0.2s ease,
-    border-color 0.2s ease,
-    box-shadow 0.2s ease;
-}
-.lock-card:hover {
-  transform: translateY(-2px);
-  border-color: rgb(var(--v-theme-primary));
-  box-shadow: 0 4px 18px -8px rgba(var(--v-theme-primary), 0.35);
-}
 .font-mono {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-size: 0.72rem;
