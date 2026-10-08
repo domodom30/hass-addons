@@ -177,7 +177,9 @@ const store = createStore({
         }
       }
       state.operations = newOperations;
-      state.waitingOperations = false;
+      // Un journal poussé par le module (lecture automatique) n'est pas la réponse à
+      // une lecture en cours : il ne doit pas arrêter le spinner « Rafraîchir ».
+      if (!data.pushed) state.waitingOperations = false;
     },
     setWaitingConfig(state, isWaiting) {
       state.waitingConfig = isWaiting;
@@ -302,9 +304,15 @@ const store = createStore({
       // string, donc il ne redéclenche jamais de lecture BLE bloquante.
       const address = typeof payload === 'string' ? payload : payload.address;
       const reload = typeof payload === 'string' ? false : !!payload.reload;
+      // Cache seul : lecture locale côté module, sans BLE. Pas de garde-fou ici —
+      // sinon, en chargeant plusieurs serrures d'affilée, seule la première partait.
+      if (!reload) {
+        api.requestOperations(address, false);
+        return;
+      }
       if (state.waiting || state.waitingOperations) return;
       commit('setWaitingOperations', true);
-      api.requestOperations(address, reload);
+      api.requestOperations(address, true);
     },
     async unpair({ state, commit }, lockAddress) {
       if (state.waiting) return;

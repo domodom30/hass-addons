@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import mqtt from 'async-mqtt';
 import manager from './manager.js';
-import store from './store.js';
+import store, { cleanBleString } from './store.js';
 import { LockedStatus } from '@domodom30/ttlock-sdk-js';
 import {
   BRIDGE_AVAILABILITY_TOPIC,
@@ -179,12 +179,12 @@ class HomeAssistant {
   _buildDevice(lock, id) {
     const address = lock.getAddress();
     const deviceInfo = lock.deviceInfo || store.getDeviceInfo(address);
-    const rawModel = lock.getModel();
-    const rawFirmware = lock.getFirmware();
-    const rawManufacturer = lock.getManufacturer();
+    const rawModel = cleanBleString(lock.getModel());
+    const rawFirmware = cleanBleString(lock.getFirmware());
+    const rawManufacturer = cleanBleString(lock.getManufacturer());
     return {
       identifiers: ['ttlock_' + id],
-      name: store.getLockAlias(address) || lock.getName(),
+      name: store.getLockAlias(address) || cleanBleString(lock.getName()),
       manufacturer: rawManufacturer && rawManufacturer !== 'unknown' ? rawManufacturer : '',
       model: rawModel && rawModel !== 'unknown' ? rawModel : deviceInfo?.modelNum || '',
       sw_version: rawFirmware && rawFirmware !== 'unknown' ? rawFirmware : deviceInfo?.firmwareRevision || ''
@@ -228,7 +228,7 @@ class HomeAssistant {
   async configureLock(lock, force = false) {
     if (!this.connected) return;
     const address = lock.getAddress();
-    const name = store.getLockAlias(address) || lock.getName();
+    const name = store.getLockAlias(address) || cleanBleString(lock.getName());
     if (!force && this.configuredLocks.get(address) === name) return;
 
     const id = lockIdFromAddress(address);

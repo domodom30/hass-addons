@@ -1,4 +1,4 @@
-import store from '../src/store.js';
+import store, { cleanBleString } from '../src/store.js';
 import manager from '../src/manager.js';
 
 class Lock {
@@ -70,9 +70,9 @@ class Lock {
    */
   static _resolveDeviceInfo(lockObject, address) {
     const deviceInfo = lockObject.deviceInfo || store.getDeviceInfo(address);
-    const model = lockObject.getModel();
-    const firmware = lockObject.getFirmware();
-    const manufacturer = lockObject.getManufacturer();
+    const model = cleanBleString(lockObject.getModel());
+    const firmware = cleanBleString(lockObject.getFirmware());
+    const manufacturer = cleanBleString(lockObject.getManufacturer());
     return {
       model: model && model !== 'unknown' ? model : deviceInfo?.modelNum || '',
       firmware: firmware && firmware !== 'unknown' ? firmware : deviceInfo?.firmwareRevision || '',
@@ -126,7 +126,7 @@ class Lock {
     lock.address = lockObject.getAddress();
     // The BLE name (GATT 2a00) is only available while connected. Persist it so the
     // offline path (fromStoreEntry) keeps showing the real name instead of the MAC.
-    const bleName = lockObject.getName();
+    const bleName = cleanBleString(lockObject.getName());
     if (bleName) store.setLockName(lock.address, bleName);
     lock.name = store.getLockAlias(lock.address) || bleName || store.getLockName(lock.address) || lock.address;
     lock.paired = lockObject.isPaired();

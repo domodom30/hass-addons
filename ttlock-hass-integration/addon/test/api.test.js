@@ -342,3 +342,22 @@ test('journal : vue ouverte = cache seul, sans BLE ; BLE fusionné au cache sans
   assert.deepEqual(calls, [['getOperationLog', ADDRESS, true]]);
   assert.deepEqual(sent.at(-1).data.operations.map((o) => o.recordNumber), [2, 1]);
 });
+
+test('journal : lecture automatique poussée à tous les clients, cache mémoire fusionné', async () => {
+  manager.getPersistedOperationLog = () => [{ recordNumber: 1, operateDate: 10 }];
+  manager.getLiveOperationLog = () => [{ recordNumber: 1, operateDate: 10 }, { recordNumber: 2, operateDate: 20 }];
+  const other = new FakeSocket();
+  wss.clients.add(other);
+  sock.sent.length = 0;
+
+  manager.emit('operationLogUpdated', { getAddress: () => ADDRESS });
+  await flush();
+
+  for (const client of [sock, other]) {
+    const pushed = client.sent.filter((m) => m.type === 'operations');
+    assert.equal(pushed.length, 1);
+    assert.equal(pushed[0].data.address, ADDRESS);
+    assert.equal(pushed[0].data.pushed, true);
+    assert.deepEqual(pushed[0].data.operations.map((o) => o.recordNumber), [2, 1]);
+  }
+});

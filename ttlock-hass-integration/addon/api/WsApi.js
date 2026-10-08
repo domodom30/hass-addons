@@ -66,6 +66,27 @@ class WsApi {
     }
   }
 
+  /**
+   * Journal envoyé à tous les clients sans demande de leur part (lecture automatique).
+   * `pushed` distingue ce message d'une réponse : le frontend ne doit pas y voir la fin
+   * d'une lecture qu'il aurait lui-même lancée (spinner « Rafraîchir »).
+   * @param {WebSocket.Server} wss
+   * @param {string} address
+   * @param {Array} operations
+   */
+  static broadcastOperationLog(wss, address, operations) {
+    const message = new Message();
+    message.setType('operations');
+    message.setData({ address, operations, pushed: true });
+    for (let ws of wss.clients) {
+      try {
+        ws.send(message.toJSON());
+      } catch (err) {
+        console.debug('broadcastOperationLog: client already closed', err.message);
+      }
+    }
+  }
+
   async sendCredentials(address, credentials) {
     const message = new Message();
     message.setType('credentials');
@@ -168,7 +189,9 @@ class WsApi {
     const message = new Message();
     message.setType('config');
     message.setData({
-      config: JSON.stringify(store.getLockData())
+      // Même vue que lockData.json : operationLog dense (le tableau mémoire est creux et
+      // sèmerait un `null` par recordNumber non lu) et deviceCache sans padding NUL.
+      config: JSON.stringify(store.getLockDataForExport())
     });
     this._send(message.toJSON());
   }

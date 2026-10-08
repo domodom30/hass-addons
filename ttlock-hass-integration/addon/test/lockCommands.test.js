@@ -13,7 +13,7 @@ const sdkStub = `
   export class TTLockClient extends EventEmitter {}
   export const AudioManage = { UNKNOWN: -1, TURN_ON: 1, TURN_OFF: 0 };
   export const LockedStatus = { UNKNOWN: -1, LOCKED: 0, UNLOCKED: 1 };
-  export const LogOperateCategory = { LOCK: [], UNLOCK: [] };
+  export const LogOperateCategory = { LOCK: [], UNLOCK: [], FAILED: [], ALARM: [], IC: [], FINGERPRINT: [] };
   export const LogOperateNames = {};
 `;
 const loader = `
@@ -195,11 +195,32 @@ test('lecture du journal : l’état live est lu avant le journal, pendant que l
   const emitted = [];
   manager.on('lockUnlock', () => emitted.push('lockUnlock'));
   manager.on('lockLock', () => emitted.push('lockLock'));
+  manager.on('operationLogUpdated', () => emitted.push('operationLogUpdated'));
 
   assert.equal(await manager._processOperationLog(lock), true);
 
   assert.deepEqual(calls, ['status', 'oplog']);
+  // Journal inchangé : rien à pousser à l'UI.
   assert.deepEqual(emitted, ['lockUnlock']);
+});
+
+test('lecture du journal : une nouvelle opération est signalée à l’UI (operationLogUpdated)', async () => {
+  const { lock } = makeLock('AA:00:00:00:00:16');
+  manager.pairedLocks.set(lock.getAddress(), lock);
+  await lock.connect(true);
+  lock.operationLog = [];
+  lock.getLockStatus = async () => LOCKED;
+  lock.getOperationLog = async () => {
+    lock.adminAuth = true;
+    lock.operationLog[1] = { recordNumber: 1, recordType: 47, operateDate: 20261007194700 };
+    return lock.operationLog;
+  };
+  const updated = [];
+  manager.on('operationLogUpdated', (l) => updated.push(l.getAddress()));
+
+  assert.equal(await manager._processOperationLog(lock), true);
+
+  assert.deepEqual(updated, ['AA:00:00:00:00:16']);
 });
 
 test('une commande en file derrière une opération longue tente bien sa connexion', async () => {

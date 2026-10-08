@@ -1,5 +1,5 @@
 <template>
-  <v-dialog v-model="localShow" persistent max-width="640px" transition="dialog-bottom-transition">
+  <v-dialog v-model="localShow" persistent max-width="960px" transition="dialog-bottom-transition">
     <v-card>
       <div class="d-flex align-center pa-5 pb-4 ga-3">
         <v-avatar size="36" color="primary" variant="tonal">
@@ -14,16 +14,17 @@
       <v-divider />
 
       <v-card-text class="pa-5">
-        <v-textarea
-          v-model="configText"
-          rows="14"
-          variant="outlined"
-          :error="!configValid"
-          :error-messages="configValid ? [] : [$t('common.invalidJson')]"
-          @update:modelValue="validateJson"
-          style="font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 12px;"
-          hide-details="auto"
+        <JsonEditorVue
+          v-if="localShow && content"
+          class="config-editor"
+          :class="{ 'jse-theme-dark': isDark }"
+          :content="content"
+          :onChange="onEditorChange"
+          v-model:mode="editorMode"
+          :readOnly="busy"
+          :navigationBar="false"
         />
+        <div v-if="!configValid" class="text-caption text-error mt-2">{{ $t('common.invalidJson') }}</div>
       </v-card-text>
 
       <v-progress-linear v-if="busy" indeterminate color="primary" height="2" />
@@ -45,14 +46,30 @@
 </template>
 
 <script>
+import { defineAsyncComponent } from "vue"
+import "vanilla-jsoneditor/themes/jse-theme-dark.css"
+import { useTheme } from "@/composables/useTheme"
+
 export default {
   name: "ConfigDlg",
+  // Chargé à la demande : l'éditeur (chunk « json-editor ») ne pèse rien tant que le
+  // dialogue n'est pas ouvert.
+  components: {
+    JsonEditorVue: defineAsyncComponent(() => import("json-editor-vue")),
+  },
   props: ["show"],
+  setup() {
+    const { isDark } = useTheme()
+    return { isDark }
+  },
   data() {
     return {
       localShow: false,
       busy: false,
-      configText: "",
+      // Format svelte-jsoneditor ({ text } ou { json }) : reste cohérent quel que soit le
+      // mode (texte/arbre), contrairement au v-model qui bascule entre chaîne et objet.
+      content: null,
+      editorMode: "text",
       configValid: true,
     }
   },
@@ -65,22 +82,29 @@ export default {
     },
   },
   methods: {
-    validateJson(val) {
-      this.configValid = this.isValidJson(val)
+    onEditorChange(updatedContent, _previousContent, { contentErrors }) {
+      this.content = updatedContent
+      this.configValid = !contentErrors
     },
-    isValidJson(val) {
-      if (!val) return false
-      try { JSON.parse(val); return true } catch { return false }
+    contentToJson() {
+      if (!this.content) return undefined
+      if (this.content.json !== undefined) return this.content.json
+      try { return JSON.parse(this.content.text) } catch { return undefined }
     },
     async saveConfig() {
       if (this.busy || !this.configValid) return
+      const data = this.contentToJson()
+      if (data === undefined) {
+        this.configValid = false
+        return
+      }
       this.busy = true
       this._errorCount = this.$store.state.errors.length
-      const data = JSON.parse(this.configText)
       await this.$store.dispatch("saveConfig", JSON.stringify(data))
     },
     cancelConfig() {
       this.$store.commit("setConfig", "")
+      this.content = null
       this.$emit("cancel")
     },
   },
@@ -96,11 +120,11 @@ export default {
       if (!newVal) return
       try {
         const parsed = JSON.parse(newVal)
-        this.configText = JSON.stringify(parsed, null, 2)
+        this.content = { text: JSON.stringify(parsed, null, 2) }
         this.configValid = true
       } catch (e) {
         console.error(e)
-        this.configText = newVal
+        this.content = { text: newVal }
         this.configValid = false
       } finally {
         this.busy = false
@@ -117,3 +141,12 @@ export default {
   },
 }
 </script>
+
+<style scoped>
+.config-editor {
+  height: 60vh;
+  --jse-font-size-mono: 12px;
+  --jse-theme-color: rgb(var(--v-theme-primary));
+  --jse-theme-color-highlight: rgb(var(--v-theme-primary));
+}
+</style>

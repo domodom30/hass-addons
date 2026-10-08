@@ -1590,6 +1590,21 @@ class Manager extends EventEmitter {
   }
 
   /**
+   * Journal en mémoire (cache SDK) d'une serrure appairée, enrichi comme
+   * getPersistedOperationLog. Plus frais que le journal persisté juste après une
+   * lecture : la persistance (dataUpdated → store.setLockData) peut ne pas être passée.
+   * @param {string} address
+   * @returns {Array}
+   */
+  getLiveOperationLog(address) {
+    const lock = this.pairedLocks.get(address);
+    if (!lock || !Array.isArray(lock.operationLog)) return [];
+    return lock.operationLog
+      .filter(Boolean)
+      .map((op) => this._enrichOperation(structuredClone(op)));
+  }
+
+  /**
    * Journal d'opérations persisté dans lockData.json, sans aucune connexion BLE.
    * Cloné avant enrichissement pour ne pas polluer store.lockData (saveData()
    * réécrirait sinon recordTypeName/recordTypeCategory/passwordName sur disque).
@@ -3112,6 +3127,9 @@ class Manager extends EventEmitter {
           this.emit('lockOperation', lock, this._enrichOperation(structuredClone(op)));
         }
       }
+      // Journal modifié (nouveautés ou rattrapage) : l'UI ne relit le journal que sur
+      // demande, sans ceci le dashboard et la page du journal restent figés.
+      if (newOps.length > 0) this.emit('operationLogUpdated', lock);
       // Émettre une seule fois pour l'état final des NOUVELLES opérations uniquement.
       // Parcours chronologique : sur un journal circulaire l'ordre des recordNumber ne
       // donne plus l'ordre des évènements, et c'est bien le DERNIER qui fixe l'état.
