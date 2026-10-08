@@ -20,6 +20,8 @@
   MQTT device name: the name read from the lock is a fixed-size field padded
   with NUL bytes. They are now stripped, and existing files are cleaned on the
   next save.
+- **SDK 0.8.8**: the NUL padding is also stripped by the SDK itself when the
+  name is read from the lock.
 - **Activity log and recent activity frozen until the page was reloaded**: the
   operations read automatically from the lock reached Home Assistant but never
   the interface, which only fetched the log when a view was opened (the
