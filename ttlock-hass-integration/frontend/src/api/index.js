@@ -404,7 +404,9 @@ class Api {
   }
 
   _onOperations(data) {
-    if (this._pendingRequest?.type === 'operations') this._pendingRequest = null;
+    // Un push (lecture automatique) ne répond à aucune demande : garder la demande en
+    // attente pour qu'elle soit rejouée si la connexion tombe avant sa réponse.
+    if (!data?.pushed && this._pendingRequest?.type === 'operations') this._pendingRequest = null;
     if (data?.address !== undefined && data?.operations !== undefined) {
       this.store.commit('setOperations', data);
     }

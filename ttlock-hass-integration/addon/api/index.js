@@ -286,7 +286,9 @@ async function handleConfig(api, msg) {
     console.warn('Config import removes paired lock(s):', check.removed.join(', '));
   }
   try {
-    store.setLockData(lockData);
+    // L'éditeur manipule la vue dense (cf. store.getLockDataForExport) : ré-indexe
+    // operationLog par recordNumber comme au chargement du fichier, le SDK l'attend creux.
+    store.setLockData(lockData.map((entry) => store._reindexOperationLog(entry)));
     manager.updateClientLockDataFromStore();
     manager.startScan().catch((e) => console.error('startScan after config error:', e.message));
     api.sendConfigConfirm();
@@ -484,6 +486,16 @@ export default async function initApi(server, options = {}) {
   // Fast state path (door-sensor relock): reaches MQTT via ha.js but had no UI listener,
   // so the Vue frontend kept showing the pre-relock state until some other event fired.
   manager.on('lockStateUpdated', sendLockStatusUpdate);
+  // Lecture automatique du journal : sans ce push, l'UI ne le relisait qu'à
+  // l'ouverture d'une vue. Cache mémoire fusionné au persisté (même règle que
+  // handleOperations : ne jamais réduire le journal affiché).
+  manager.on('operationLogUpdated', (lock) => {
+    const address = lock.getAddress();
+    WsApi.broadcastOperationLog(wss, address, mergeOperationsByRecord(
+      manager.getPersistedOperationLog(address),
+      manager.getLiveOperationLog(address)
+    ));
+  });
   manager.on('scanStart', sendStatusUpdate);
   manager.on('scanStop', sendStatusUpdate);
   manager.on('adapterReady', sendStatusUpdate);

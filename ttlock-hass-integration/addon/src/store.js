@@ -1,6 +1,19 @@
 import { promises as fs } from 'node:fs';
 import { isPairedEntry } from './lockDataImport.js';
 
+/**
+ * Retire le padding NUL des chaînes lues en GATT (ex. nom 2a00 : "R6_b89c5f\u0000\u0000…").
+ * Le SDK fait un simple `Buffer.toString()`, donc les octets 0x00 de fin de la caractéristique
+ * se retrouvent dans le nom affiché, MQTT et lockData.json.
+ * @param {any} value
+ * @returns {any} la chaîne nettoyée (undefined si vide), ou la valeur telle quelle si non-string
+ */
+export function cleanBleString(value) {
+  if (typeof value !== 'string') return value;
+  const cleaned = value.replace(/\u0000/g, '').trim();
+  return cleaned === '' ? undefined : cleaned;
+}
+
 class Store {
   settingsPath = '/data';
   lockData = [];
@@ -46,7 +59,8 @@ class Store {
     for (const entry of this.lockData) {
       if (entry && entry.address) prevByAddress.set(entry.address, entry);
     }
-    this.lockData = incoming.map((entry) => {
+    this.lockData = incoming.map((raw) => {
+      const entry = this._cleanDeviceCache(raw);
       if (this._isPairedEntry(entry)) return entry;
       const prev = entry && entry.address ? prevByAddress.get(entry.address) : undefined;
       if (prev && this._isPairedEntry(prev)) {
@@ -161,6 +175,7 @@ class Store {
    * @param {string} name BLE-advertised name
    */
   setLockName(address, name) {
+    name = cleanBleString(name);
     if (!address || !name) return;
     if (!this.deviceInfoData[address]) this.deviceInfoData[address] = {};
     if (this.deviceInfoData[address].name === name) return;
@@ -174,7 +189,7 @@ class Store {
    * @returns {string|undefined}
    */
   getLockName(address) {
-    return this.deviceInfoData[address]?.name;
+    return cleanBleString(this.deviceInfoData[address]?.name);
   }
 
   /**
@@ -376,6 +391,41 @@ class Store {
     return { ...entry, operationLog: sparse };
   }
 
+  /**
+   * Nettoie les chaînes de `deviceCache` (valeurs GATT statiques mises en cache par le SDK)
+   * de leur padding NUL. Les clés dont la valeur devient vide sont retirées. Renvoie
+   * l'entrée telle quelle si rien n'est à nettoyer. Fonction pure — aucun effet de bord.
+   * @param {any} entry
+   * @returns {any}
+   */
+  _cleanDeviceCache(entry) {
+    const cache = entry?.deviceCache;
+    if (!cache || typeof cache !== 'object') return entry;
+    let changed = false;
+    const cleaned = {};
+    for (const [key, value] of Object.entries(cache)) {
+      const v = cleanBleString(value);
+      if (v !== value) changed = true;
+      if (v !== undefined) cleaned[key] = v;
+    }
+    return changed ? { ...entry, deviceCache: cleaned } : entry;
+  }
+
+  /**
+   * Vue sérialisable de lockData, identique à ce qui est écrit sur disque : operationLog
+   * densifié (aucun `null`, borné à MAX_OPLOG) et deviceCache sans padding NUL. Sert à
+   * l'écriture de lockData.json et à l'éditeur de configuration de l'interface.
+   * In-memory lockData stays intact so the SDK's sequence-number tracking is unaffected.
+   * @returns {Array}
+   */
+  getLockDataForExport() {
+    return this.lockData.map((raw) => {
+      const entry = this._cleanDeviceCache(raw);
+      if (!entry || !Array.isArray(entry.operationLog)) return entry;
+      return { ...entry, operationLog: this._denseOperationLog(entry.operationLog) };
+    });
+  }
+
   async loadData() {
     try {
       await fs.access(this.settingsPath + '/lockData.json');
@@ -383,7 +433,8 @@ class Store {
       const parsed = JSON.parse(lockDataTxt);
       // Ré-indexe operationLog par recordNumber : le fichier est dense (sans null) mais le
       // SDK attend un tableau creux indexé par recordNumber (cf. _reindexOperationLog).
-      this.lockData = (Array.isArray(parsed) ? parsed : []).map((entry) => this._reindexOperationLog(entry));
+      this.lockData = (Array.isArray(parsed) ? parsed : []).map((entry) =>
+        this._reindexOperationLog(this._cleanDeviceCache(entry)));
     } catch (error) {
       this.lockData = [];
       if (error.code !== 'ENOENT') {
@@ -471,11 +522,7 @@ class Store {
       // recordNumber côté SDK), donc JSON.stringify sèmerait un `null` par recordNumber non
       // lu. On densifie TOUJOURS (pas seulement au-delà de 300) pour que le fichier ne
       // contienne aucun `null`, tout en bornant aux 300 opérations les plus récentes.
-      // In-memory lockData stays intact so the SDK's sequence-number tracking is unaffected.
-      const lockDataToSave = this.lockData.map((entry) => {
-        if (!entry || !Array.isArray(entry.operationLog)) return entry;
-        return { ...entry, operationLog: this._denseOperationLog(entry.operationLog) };
-      });
+      const lockDataToSave = this.getLockDataForExport();
       await fs.writeFile(tmpLock, Buffer.from(JSON.stringify(lockDataToSave)));
       await this.fileDataRename(tmpLock, lockPath);
     } catch (error) {

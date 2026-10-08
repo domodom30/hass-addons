@@ -1,6 +1,34 @@
 # Changelog
 
 
+## [3.1.5] — 2026-10-08
+
+### 🎨 UI / UX
+
+- **JSON editor for "Edit configuration"**: syntax highlighting, folding,
+  error markers and a tree view instead of a plain text area. Loaded only when
+  the dialog is opened, follows the light/dark theme.
+
+### 🐛 Fixed
+
+- **No more `null` in the configuration editor's `operationLog`**: the editor
+  received the in-memory journal (indexed by record number, one `null` per
+  unread record) instead of the compact one written to `lockData.json`.
+  Saving from the editor re-indexes the journal like a restart does.
+- **Lock name padded with `\u0000`** (`"R6_b89c5f\u0000\u0000…"`) in
+  `lockData.json` (`deviceCache`), `deviceInfoData.json`, the interface and the
+  MQTT device name: the name read from the lock is a fixed-size field padded
+  with NUL bytes. They are now stripped, and existing files are cleaned on the
+  next save.
+- **Activity log and recent activity frozen until the page was reloaded**: the
+  operations read automatically from the lock reached Home Assistant but never
+  the interface, which only fetched the log when a view was opened (the
+  dashboard only once per lock). The add-on now pushes the updated log to the
+  open pages after each automatic read.
+- **Only the first lock's log loaded with several locks**: loading the logs of
+  all locks at once dropped every request after the first one.
+
+
 ## [3.1.4] — 2026-10-07
 
 ### 🎨 UI / UX

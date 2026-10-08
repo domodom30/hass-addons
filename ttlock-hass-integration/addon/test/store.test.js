@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import store from '../src/store.js';
+import store, { cleanBleString } from '../src/store.js';
 
 test('_denseOperationLog: retire les null/trous, trie récent→ancien, borne à 300', () => {
   // Tableau creux indexé par recordNumber, tel que produit par le SDK.
@@ -191,6 +191,66 @@ test('intégration disque: round-trip creux-avec-null → dense (save) → creux
     assert.equal(savedOplog.length, 3);
     // Toutes les opérations réelles sont conservées, triées récent→ancien.
     assert.deepEqual(savedOplog.map((op) => op.recordNumber), [50, 2, 1]);
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('cleanBleString: retire le padding NUL des chaînes GATT', () => {
+  assert.equal(cleanBleString('R6_b89c5f' + '\u0000'.repeat(22)), 'R6_b89c5f');
+  assert.equal(cleanBleString('R6_b89c5f'), 'R6_b89c5f');
+  assert.equal(cleanBleString('\u0000\u0000'), undefined);
+  assert.equal(cleanBleString(undefined), undefined);
+  assert.equal(cleanBleString(42), 42);
+});
+
+test('getLockDataForExport: operationLog dense sans null, deviceCache sans NUL', async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'ttlock-store-'));
+  try {
+    const oplog = [];
+    oplog[3] = { recordNumber: 3, operateDate: 20260101120000 };
+    oplog[40] = { recordNumber: 40, operateDate: 20260102120000 };
+    const padded = 'R6_b89c5f' + '\u0000'.repeat(22);
+    const legacy = [{
+      address: 'E4:5B:E2:5F:9C:B8',
+      privateData: { aesKey: 'deadbeef', admin: { adminPs: 1, unlockKey: 2 } },
+      deviceCache: { name: padded, modelNum: 'R6' },
+      operationLog: oplog
+    }];
+    await fs.writeFile(path.join(dir, 'lockData.json'), JSON.stringify(legacy));
+
+    store.setDataPath(dir);
+    await store.loadData();
+    // Le cache transmis au SDK est déjà propre en mémoire.
+    assert.equal(store.getLockData()[0].deviceCache.name, 'R6_b89c5f');
+
+    const exported = JSON.stringify(store.getLockDataForExport());
+    assert.equal(exported.includes('null'), false, 'aucun null dans la vue éditeur');
+    assert.equal(exported.includes('\\u0000'), false, 'aucun NUL dans la vue éditeur');
+    assert.deepEqual(JSON.parse(exported)[0].operationLog.map((op) => op.recordNumber), [40, 3]);
+
+    // setLockData (éditeur/SDK) nettoie aussi le cache, puis l'écriture disque est propre.
+    store.setLockData([{ ...legacy[0], deviceCache: { name: padded } }]);
+    await store.saveData();
+    const saved = await fs.readFile(path.join(dir, 'lockData.json'), 'utf8');
+    assert.equal(saved.includes('\\u0000'), false);
+    assert.equal(JSON.parse(saved)[0].deviceCache.name, 'R6_b89c5f');
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('setLockName/getLockName: nom BLE sans padding NUL', async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'ttlock-store-'));
+  try {
+    store.setDataPath(dir);
+    const address = 'AA:BB:CC:DD:EE:01';
+    store.setLockName(address, 'R6_b89c5f\u0000\u0000\u0000');
+    await store.saveData();
+    assert.equal(store.getLockName(address), 'R6_b89c5f');
+    // Valeur héritée déjà persistée avec padding : nettoyée à la lecture.
+    store.deviceInfoData[address].name = 'R6_b89c5f\u0000';
+    assert.equal(store.getLockName(address), 'R6_b89c5f');
   } finally {
     await fs.rm(dir, { recursive: true, force: true });
   }
