@@ -1,6 +1,19 @@
 # Changelog
 
 
+## [3.1.6] — 2026-10-13
+
+### 🎨 UI / UX
+
+- **Auto-lock and sound coloured by state** on the lock cards: green when
+  enabled, orange when disabled (they were always grey).
+- **Lock card information shown as badges**: battery, signal, auto-lock and
+  sound each sit in a rounded badge tinted with their state colour, with the
+  icon in a round chip; smaller value text (0.8rem) and more line spacing.
+- **MAC address in a badge** under the lock name, styled like the version
+  badge of the top bar, with a Bluetooth icon.
+
+
 ## [3.1.5] — 2026-10-08
 
 ### 🎨 UI / UX

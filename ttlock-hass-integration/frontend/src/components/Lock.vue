@@ -6,9 +6,10 @@
         <div class="text-subtitle-1 font-weight-bold text-truncate">
           {{ lock.name }}
         </div>
-        <div class="text-caption text-medium-emphasis font-mono text-truncate">
-          {{ lock.address }}
-        </div>
+        <span class="mac-badge font-mono mt-1">
+          <v-icon icon="mdi-bluetooth" size="12" class="flex-shrink-0" />
+          <span class="text-truncate">{{ lock.address }}</span>
+        </span>
       </div>
       <v-chip
         :color="stateColor"
@@ -32,12 +33,19 @@
       </div>
       <!-- Informations : libellé explicite pour chaque valeur -->
       <div v-if="stats.length" class="lock-stats w-100">
-        <div v-for="stat in stats" :key="stat.key" class="lock-stat d-flex align-center ga-2">
-          <v-icon size="18" :icon="stat.icon" :color="stat.color" class="flex-shrink-0" />
+        <div
+          v-for="stat in stats"
+          :key="stat.key"
+          class="lock-stat d-flex align-center ga-2"
+          :style="{ '--stat-rgb': `var(--v-theme-${stat.color || 'on-surface'})` }"
+        >
+          <span class="lock-stat-icon flex-shrink-0">
+            <v-icon size="16" :icon="stat.icon" :color="stat.color" />
+          </span>
           <div class="min-w-0">
-            <div class="text-caption text-medium-emphasis lh-tight text-truncate">{{ stat.label }}</div>
+            <div class="lock-stat-label text-caption text-medium-emphasis text-truncate">{{ stat.label }}</div>
             <div
-              class="text-body-2 font-weight-medium lh-tight text-truncate"
+              class="lock-stat-value font-weight-medium text-truncate"
               :class="stat.color ? `text-${stat.color}` : ''"
             >{{ stat.value }}</div>
           </div>
@@ -284,7 +292,7 @@ export default {
         stats.push({
           key: "autolock",
           icon: "mdi-lock-clock",
-          color: null,
+          color: this.lock.autoLockTime > 0 ? "success" : "warning",
           label: this.$t("lock.autoLockTime"),
           value:
             this.lock.autoLockTime > 0
@@ -296,7 +304,7 @@ export default {
         stats.push({
           key: "audio",
           icon: this.lock.audio ? "mdi-volume-high" : "mdi-volume-off",
-          color: null,
+          color: this.lock.audio ? "success" : "warning",
           label: this.$t("lock.sound"),
           value: this.lock.audio ? this.$t("lock.soundOn") : this.$t("lock.soundOff"),
         });
@@ -386,12 +394,38 @@ export default {
   gap: 8px 12px;
 }
 .lock-stat {
-  padding: 6px 10px;
-  border-radius: 10px;
-  background: rgba(var(--v-theme-on-surface), 0.04);
+  padding: 6px 12px 6px 6px;
+  border-radius: 15px;
+  background: rgba(var(--stat-rgb), 0.06);
+  border: 1px solid rgba(var(--stat-rgb), 0.22);
 }
-.lh-tight {
-  line-height: 1.25;
+.lock-stat-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(var(--stat-rgb), 0.16);
+}
+.mac-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: rgba(var(--v-theme-primary), 0.15);
+  color: rgb(var(--v-theme-primary));
+  font-weight: 600;
+  line-height: 16px;
+}
+.lock-stat-label {
+  line-height: 1.5;
+}
+.lock-stat-value {
+  font-size: 0.8rem;
+  line-height: 1.5;
 }
 .min-w-0 {
   min-width: 0;
