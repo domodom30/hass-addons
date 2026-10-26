@@ -976,6 +976,7 @@ class BluetoothAudioManager:
         self._broadcast_status(f"Connecting to {address}...")
 
         self._connecting.add(address)
+        success = False
         try:
             device = await self._get_or_create_device(address)
 
@@ -1110,6 +1111,7 @@ class BluetoothAudioManager:
                         await self._apply_idle_mode(address)
                         await self._start_mpd_if_enabled(address)
                     await self._broadcast_all()
+                    success = True
                     return True
                 logger.warning("%s sink for %s did not appear in PulseAudio", profile_label, address)
                 await self._broadcast_all()
@@ -1117,10 +1119,21 @@ class BluetoothAudioManager:
 
             # PulseAudio not available — connection may still work at BlueZ level
             await self._broadcast_all()
-            return await device.is_connected()
+            success = await device.is_connected()
+            return success
         finally:
             self._connecting.discard(address)
             self.event_bus.emit("status", {"message": ""})
+            # A failed manual connect cancelled the reconnect loop above, and
+            # no Connected=false signal will follow since the device never
+            # connected — re-arm auto-reconnect (no-op if auto_connect is off).
+            if (
+                not success
+                and not _from_reconnect
+                and not _from_pair
+                and self.reconnect_service
+            ):
+                self.reconnect_service.handle_disconnect(address)
 
     async def disconnect_device(self, address: str) -> None:
         """Disconnect a device without removing it from the store."""
@@ -1630,7 +1643,7 @@ class BluetoothAudioManager:
             if m:
                 macs.add(m.group(1).upper())
         if macs:
-            logger.info("HA Bluetooth integration manages adapters: %s", macs)
+            logger.debug("HA Bluetooth integration manages adapters: %s", macs)
         return macs
 
     @staticmethod

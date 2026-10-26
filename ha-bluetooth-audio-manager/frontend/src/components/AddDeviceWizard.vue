@@ -217,10 +217,6 @@ export default {
 </script>
 
 <style scoped>
-.font-mono {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  font-size: 0.72rem;
-}
 .step-dot {
   height: 4px;
   border-radius: 2px;

@@ -22,6 +22,19 @@ class ReconnectService:
 
     QUICK_RETRY_DELAY = 10  # seconds — fast first attempt for transient glitches
 
+    # BlueZ Connect() errors caused by stale connection state on our side
+    # (e.g. avdtp_connect_cb() "Operation already in progress" / EALREADY,
+    # which BlueZ reports as br-connection-unknown) rather than an absent
+    # speaker.  They fail in milliseconds and never clear on their own.
+    STALE_CONN_ERRORS = (
+        "br-connection-unknown",
+        "br-connection-busy",
+        "br-connection-already-connected",
+        "br-connection-canceled",
+    )
+    STALE_CLEAR_THRESHOLD = 2  # consecutive stale failures before clearing
+    STALE_CLEAR_EVERY = 3  # then clear again every N stale failures
+
     def __init__(self, manager: "BluetoothAudioManager"):
         self._manager = manager
         self._tasks: dict[str, asyncio.Task] = {}
@@ -108,6 +121,7 @@ class ReconnectService:
         if not self._running:
             return
 
+        stale_failures = 0
         try:
             success = await self._manager.connect_device(
                 address, _from_reconnect=True
@@ -126,6 +140,7 @@ class ReconnectService:
                 "Quick reconnect to %s failed: %s — falling back to backoff",
                 address, e,
             )
+            stale_failures = await self._handle_failure(address, e, stale_failures)
 
         interval = self._manager.config.reconnect_interval_seconds
         max_backoff = self._manager.config.reconnect_max_backoff_seconds
@@ -162,6 +177,7 @@ class ReconnectService:
                     )
                     self._tasks.pop(address, None)
                     return
+                stale_failures = 0
             except (DBusError, asyncio.TimeoutError, OSError) as e:
                 logger.warning(
                     "Reconnect attempt %d for %s failed: %s",
@@ -170,5 +186,55 @@ class ReconnectService:
                 self._manager._broadcast_status(
                     f"Reconnect attempt {attempt + 1} for {address} failed"
                 )
+                stale_failures = await self._handle_failure(
+                    address, e, stale_failures
+                )
 
             attempt += 1
+
+    @classmethod
+    def _is_stale_conn_error(cls, error: Exception) -> bool:
+        if not isinstance(error, DBusError):
+            return False
+        text = getattr(error, "text", None) or str(error)
+        return any(code in text for code in cls.STALE_CONN_ERRORS)
+
+    async def _handle_failure(
+        self, address: str, error: Exception, stale_failures: int
+    ) -> int:
+        """Track consecutive stale-state failures; clear them periodically.
+
+        Returns the updated consecutive stale failure count.
+        """
+        if not self._is_stale_conn_error(error):
+            return 0
+        stale_failures += 1
+        since_threshold = stale_failures - self.STALE_CLEAR_THRESHOLD
+        if since_threshold >= 0 and since_threshold % self.STALE_CLEAR_EVERY == 0:
+            await self._clear_stale_connection(address, error)
+        return stale_failures
+
+    async def _clear_stale_connection(self, address: str, error: Exception) -> None:
+        """Abort a stuck pending connection in BlueZ/kernel.
+
+        Device1.Disconnect() cancels a pending ACL/L2CAP connect even when
+        the device is not connected.  Calls the device wrapper directly —
+        manager.disconnect_device() would suppress auto-reconnect and cancel
+        this loop.  The adapter is never power-cycled: it is shared with the
+        HA Bluetooth integration and its power state is managed by HAOS.
+        """
+        logger.warning(
+            "Clearing stale BlueZ connection state for %s (%s)", address, error
+        )
+        self._manager._broadcast_status(
+            f"Clearing stale connection state for {address}..."
+        )
+        try:
+            device = self._manager.managed_devices.get(address)
+            if not device:
+                device = await self._manager._get_or_create_device(address)
+            await device.disconnect()
+        except Exception as e:
+            logger.debug("Stale connection clear failed for %s: %s", address, e)
+            return
+        await asyncio.sleep(3)
