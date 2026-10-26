@@ -1,3 +1,15 @@
+## [3.3.9] — 2026-10-26
+
+### 🐛 Fixed
+
+- **Pending auto-reconnect cancelled when the device reconnects on its own**:
+  when a speaker came back through an incoming connection, the scheduled
+  reconnect attempt still fired and re-ran `Connect()` plus the post-connect
+  setup on an already connected device. The pending attempt is now cancelled
+  as soon as BlueZ reports `Connected=True`.
+
+---
+
 ## [3.3.8] — 2026-10-26
 
 ### 🐛 Fixed

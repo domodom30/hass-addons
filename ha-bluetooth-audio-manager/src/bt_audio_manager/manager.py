@@ -1869,6 +1869,12 @@ class BluetoothAudioManager:
         self._device_connect_time[address] = time.time()
         self._last_signaled_volume.pop(address, None)
         self._last_pa_volume.pop(address, None)
+        # The device came back on its own (incoming connection) — stop any
+        # pending auto-reconnect so it doesn't re-run Connect() and the
+        # post-connect setup on an already connected device.  Skipped while
+        # a connect is in progress: that may be the reconnect loop itself.
+        if self.reconnect_service and address not in self._connecting:
+            self.reconnect_service.cancel_reconnect(address)
         self._fire_and_forget(self._on_device_connected_async(address))
 
     async def _on_device_connected_async(self, address: str) -> None:
