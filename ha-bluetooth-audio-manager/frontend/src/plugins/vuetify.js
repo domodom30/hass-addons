@@ -36,7 +36,7 @@ const lightTheme = {
 
     success: "#34C759",
     warning: "#FF9500",
-    error: "#e62b0fff",
+    error: "#FF3B30",
     info: "#55A6FF",
 
     outline: "#D5DADF",
@@ -69,7 +69,7 @@ const darkTheme = {
 
     success: "#30D158",
     warning: "#FF9F0A",
-    error: "#e62b0fff",
+    error: "#FF453A",
     info: "#64D2FF",
 
     outline: "#353535",

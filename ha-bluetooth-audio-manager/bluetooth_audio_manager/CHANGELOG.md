@@ -1,3 +1,33 @@
+## [3.3.8] — 2026-10-26
+
+### 🐛 Fixed
+
+- **Auto-reconnect stuck forever on `br-connection-unknown`**: when BlueZ kept
+  a stale pending connection to a speaker (bluetoothd: `avdtp_connect_cb()
+  … Operation already in progress`), every attempt failed in milliseconds and
+  the backoff loop retried indefinitely. After repeated stale-state failures
+  the reconnect service now calls `Disconnect()` on the device to abort the
+  stuck connection before retrying.
+- **Failed manual connect disabled auto-reconnect**: clicking Connect cancelled
+  the pending auto-reconnect, and if the attempt failed nothing restarted it
+  until the app was restarted. Auto-reconnect is now re-armed after a failed
+  manual connect.
+- The `HA Bluetooth integration manages adapters` message is now logged at
+  DEBUG level instead of flooding the log every few seconds.
+
+### 🎨 Improved
+
+- **Sharper, consistent font**: the UI now uses the native system font
+  (Segoe UI on Windows, San Francisco on macOS/iOS, Roboto on Android) instead
+  of the bundled Inter web font, which rendered blurry on Windows. Titles and
+  captions no longer fall back to a different font.
+- **More readable logs**: Bluetooth addresses (e.g. `{'C0:E3:50:9E:49:D0'}`) are
+  shown as small coloured badges, BlueZ D-Bus paths are dimmed, and long
+  messages wrap instead of overflowing.
+- Error colour aligned with the rest of the palette.
+
+---
+
 ## [3.3.7] — 2026-10-06
 
 ### 🔧 Changed

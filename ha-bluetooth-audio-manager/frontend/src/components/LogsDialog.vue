@@ -37,13 +37,19 @@
         <div v-if="displayed.length === 0" class="text-center text-medium-emphasis py-6">
           {{ $t("logs.empty") }}
         </div>
-        <div v-for="e in displayed" :key="e.id" class="log-row d-flex align-center ga-2">
+        <div v-for="e in displayed" :key="e.id" class="log-row d-flex align-start ga-2">
           <span class="text-medium-emphasis log-ts">{{ ts(e) }}</span>
           <v-chip size="x-small" :color="levelColor(e.level)" variant="tonal" label class="log-level">
             {{ e.level }}
           </v-chip>
           <span class="text-medium-emphasis log-logger">{{ shortLogger(e.logger) }}</span>
-          <span class="flex-grow-1">{{ e.message }}</span>
+          <span class="flex-grow-1 log-message">
+            <template v-for="(t, i) in tokenize(e.message)" :key="i">
+              <span v-if="t.type === 'mac'" class="log-mac">{{ t.value }}</span>
+              <span v-else-if="t.type === 'path'" class="log-path">{{ t.value }}</span>
+              <template v-else>{{ t.value }}</template>
+            </template>
+          </span>
         </div>
       </v-card-text>
     </v-card>
@@ -52,6 +58,7 @@
 
 <script>
 import DialogHeader from "@/components/base/DialogHeader.vue";
+import { tokenizeLogMessage } from "@/log-format.js";
 
 export default {
   name: "LogsDialog",
@@ -114,6 +121,7 @@ export default {
     },
   },
   methods: {
+    tokenize: tokenizeLogMessage,
     ts(e) {
       const d = new Date(e.ts * 1000);
       return d.toLocaleTimeString() + "." + String(d.getMilliseconds()).padStart(3, "0");
@@ -162,5 +170,22 @@ export default {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+.log-message {
+  min-width: 0;
+  word-break: break-word;
+}
+.log-mac {
+  font-size: 0.68rem;
+  color: rgb(var(--v-theme-accent));
+  background: rgba(var(--v-theme-accent), 0.1);
+  border-radius: 4px;
+  padding: 0 4px;
+  margin: 0 1px;
+  white-space: nowrap;
+}
+.log-path {
+  font-size: 0.68rem;
+  color: rgba(var(--v-theme-on-surface), var(--v-medium-emphasis-opacity));
 }
 </style>

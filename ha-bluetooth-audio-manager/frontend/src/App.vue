@@ -99,14 +99,21 @@ export default {
 </script>
 
 <style>
+/* Native system fonts: crisp OS rendering (ClearType on Windows), no download */
+:root {
+  --app-font: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue",
+    Arial, "Noto Sans", sans-serif;
+}
+
 html,
 body,
 .v-application {
-  font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI",
-    "Helvetica Neue", Arial, sans-serif;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  text-rendering: optimizeLegibility;
+  font-family: var(--app-font);
+}
+
+/* Vuetify typography classes hard-code Roboto (never loaded) — keep one font */
+.v-application [class*="text-"] {
+  font-family: var(--app-font) !important;
 }
 
 .v-alert,
@@ -152,8 +159,9 @@ body,
   }
 }
 
-.font-mono {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+.v-application .font-mono {
+  font-family: ui-monospace, "Cascadia Mono", "Segoe UI Mono", SFMono-Regular,
+    Menlo, Consolas, monospace !important;
   font-size: 0.75rem;
 }
 
