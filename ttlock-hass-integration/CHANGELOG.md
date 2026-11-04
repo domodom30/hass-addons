@@ -1,6 +1,16 @@
 # Changelog
 
 
+## [3.1.7] — 2026-11-04
+
+### 🎨 UI / UX
+
+- **Compact lock card badges**: battery, signal, auto-lock and sound now show
+  icon, label and value on a single line in small pills (0.7rem, 14px icon,
+  no round icon chip), laid out side by side and wrapping only when the card
+  is too narrow. Hovering a badge shows "label : value".
+
+
 ## [3.1.6] — 2026-10-13
 
 ### 🎨 UI / UX

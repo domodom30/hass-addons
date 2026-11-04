@@ -36,19 +36,16 @@
         <div
           v-for="stat in stats"
           :key="stat.key"
-          class="lock-stat d-flex align-center ga-2"
+          class="lock-stat"
+          :title="`${stat.label} : ${stat.value}`"
           :style="{ '--stat-rgb': `var(--v-theme-${stat.color || 'on-surface'})` }"
         >
-          <span class="lock-stat-icon flex-shrink-0">
-            <v-icon size="16" :icon="stat.icon" :color="stat.color" />
-          </span>
-          <div class="min-w-0">
-            <div class="lock-stat-label text-caption text-medium-emphasis text-truncate">{{ stat.label }}</div>
-            <div
-              class="lock-stat-value font-weight-medium text-truncate"
-              :class="stat.color ? `text-${stat.color}` : ''"
-            >{{ stat.value }}</div>
-          </div>
+          <v-icon size="14" :icon="stat.icon" :color="stat.color" class="flex-shrink-0" />
+          <span class="lock-stat-label text-medium-emphasis">{{ stat.label }}</span>
+          <span
+            class="lock-stat-value font-weight-medium"
+            :class="stat.color ? `text-${stat.color}` : ''"
+          >{{ stat.value }}</span>
         </div>
       </div>
     </div>
@@ -389,24 +386,23 @@ export default {
   background: rgba(var(--v-theme-warning), 0.12);
 }
 .lock-stats {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px 12px;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 4px;
 }
 .lock-stat {
-  padding: 6px 12px 6px 6px;
-  border-radius: 15px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  padding: 2px 8px 2px 6px;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  line-height: 18px;
+  white-space: nowrap;
   background: rgba(var(--stat-rgb), 0.06);
   border: 1px solid rgba(var(--stat-rgb), 0.22);
-}
-.lock-stat-icon {
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(var(--stat-rgb), 0.16);
 }
 .mac-badge {
   display: inline-flex;
@@ -419,16 +415,6 @@ export default {
   color: rgb(var(--v-theme-primary));
   font-weight: 600;
   line-height: 16px;
-}
-.lock-stat-label {
-  line-height: 1.5;
-}
-.lock-stat-value {
-  font-size: 0.8rem;
-  line-height: 1.5;
-}
-.min-w-0 {
-  min-width: 0;
 }
 .bg-secondary-tonal {
   background: rgba(var(--v-theme-secondary), 0.12);
