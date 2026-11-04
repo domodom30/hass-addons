@@ -38,10 +38,10 @@
           :key="stat.key"
           class="lock-stat"
           :title="`${stat.label} : ${stat.value}`"
+          :aria-label="`${stat.label} : ${stat.value}`"
           :style="{ '--stat-rgb': `var(--v-theme-${stat.color || 'on-surface'})` }"
         >
           <v-icon size="14" :icon="stat.icon" :color="stat.color" class="flex-shrink-0" />
-          <span class="lock-stat-label text-medium-emphasis">{{ stat.label }}</span>
           <span
             class="lock-stat-value font-weight-medium"
             :class="stat.color ? `text-${stat.color}` : ''"
