@@ -1,5 +1,6 @@
 import { computed } from "vue";
 import { useTheme as useVuetifyTheme } from "vuetify";
+import { haThemeActive } from "../plugins/haTheme";
 
 const STORAGE_KEY = "bt_audio_theme";
 
@@ -22,5 +23,6 @@ export function useTheme() {
     setTheme(isDark.value ? "light" : "dark");
   }
 
-  return { isDark, currentTheme, setTheme, toggleTheme };
+  // Dans Home Assistant, le thème suit celui de HA : pas de bascule manuelle.
+  return { isDark, currentTheme, setTheme, toggleTheme, followsHa: haThemeActive };
 }
