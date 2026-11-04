@@ -1,6 +1,15 @@
 # Changelog
 
 
+## [3.1.8] — 2026-11-04
+
+### 🎨 UI / UX
+
+- **Lock card badges without their label**: battery, signal, auto-lock and
+  sound now show only the icon and the value, so the four badges fit on a
+  single line. The label is shown on hover ("label : value").
+
+
 ## [3.1.7] — 2026-11-04
 
 ### 🎨 UI / UX
