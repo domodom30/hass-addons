@@ -27,8 +27,8 @@
 
 | Add-on | Version | Description | Architectures |
 |---|---|---|---|
-| [**TTLock**](./ttlock-hass-integration) | `3.1.8` | Intégration des serrures connectées TTLock via BLE, **sans cloud**. | amd64, armv7, armhf, i386, aarch64 |
-| [**Bluetooth Audio Manager**](./ha-bluetooth-audio-manager) | `3.3.9` | Gestion des périphériques audio Bluetooth (A2DP) avec appairage persistant et reconnexion automatique. | aarch64, amd64, armv7, armhf |
+| [**TTLock**](./ttlock-hass-integration) | `3.1.9` | Intégration des serrures connectées TTLock via BLE, **sans cloud**. | amd64, armv7, armhf, i386, aarch64 |
+| [**Bluetooth Audio Manager**](./ha-bluetooth-audio-manager) | `3.3.10` | Gestion des périphériques audio Bluetooth (A2DP) avec appairage persistant et reconnexion automatique. | aarch64, amd64, armv7, armhf |
 
 ---
 
