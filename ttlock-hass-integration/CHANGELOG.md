@@ -1,6 +1,19 @@
 # Changelog
 
 
+## [3.1.9] — 2026-11-04
+
+### 🎨 UI / UX
+
+- **The interface follows the Home Assistant theme**: when opened through
+  Ingress, the UI now reads the active Home Assistant theme and applies it —
+  colours, light/dark mode, page background, glass cards, header and dialogs.
+  Changing the theme or the mode in Home Assistant updates the UI live, without
+  a reload. The light/dark toggle is hidden in that case (Home Assistant
+  decides); outside Home Assistant the built-in light and dark themes are
+  unchanged.
+
+
 ## [3.1.8] — 2026-11-04
 
 ### 🎨 UI / UX

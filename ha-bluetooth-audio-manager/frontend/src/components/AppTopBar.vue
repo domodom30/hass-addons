@@ -50,7 +50,7 @@
 
     <template #append>
       <div class="d-flex align-center ga-1 pr-2">
-        <v-tooltip :text="$t('theme.toggle')" location="bottom">
+        <v-tooltip v-if="!followsHa" :text="$t('theme.toggle')" location="bottom">
           <template #activator="{ props }">
             <v-btn v-bind="props" :icon="isDark ? 'mdi-weather-sunny' : 'mdi-weather-night'" variant="text" size="small"
               @click="toggleTheme" />
@@ -138,8 +138,8 @@ export default {
   name: "AppTopBar",
   inject: ["confirm"],
   setup() {
-    const { isDark, toggleTheme } = useTheme();
-    return { isDark, toggleTheme };
+    const { isDark, toggleTheme, followsHa } = useTheme();
+    return { isDark, toggleTheme, followsHa };
   },
   data() {
     return {

@@ -204,7 +204,7 @@
         </v-menu>
 
         <!-- Toggle thème -->
-        <v-tooltip :text="$t('theme.toggle')" location="bottom">
+        <v-tooltip v-if="!followsHa" :text="$t('theme.toggle')" location="bottom">
           <template #activator="{ props }">
             <v-btn
               v-bind="props"
@@ -312,9 +312,9 @@ import { useDisplay } from "vuetify";
 export default {
   name: "AppTopBar",
   setup() {
-    const { isDark, toggleTheme } = useTheme();
+    const { isDark, toggleTheme, followsHa } = useTheme();
     const { smAndDown } = useDisplay();
-    return { isDark, toggleTheme, smAndDown };
+    return { isDark, toggleTheme, followsHa, smAndDown };
   },
   computed: {
     version() {
