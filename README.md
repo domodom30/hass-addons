@@ -8,6 +8,10 @@
 
 [![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/A1V11ZZTPI)
 
+<img src=".github/assets/addons-demo.gif" width="800" alt="Interfaces des add-ons TTLock (serrures et activité récente) et Bluetooth Audio Manager (périphériques audio)">
+
+⭐ **Les add-ons vous servent ? Une étoile sur le dépôt aide d'autres utilisateurs à les trouver.**
+
 </div>
 
 ---
